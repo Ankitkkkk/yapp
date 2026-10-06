@@ -116,6 +116,16 @@ class ParserTests(unittest.TestCase):
 
 
 class MainEntryTests(EntryHarness):
+    def test_missing_markdown_dependency_explains_install_before_server_start(self):
+        for name in ('rich.markdown', 'markdown_it'):
+            with self.subTest(name=name), patch.dict(sys.modules, {name: None}):
+                result = self.run_main()
+                self.assertEqual(result['code'], 1)
+                self.assertIn('Install terminal dependencies', result['stderr'])
+                result['ensure'].assert_not_called()
+                plain = self.run_main(['--plain'])
+                self.assertEqual(plain['code'], 0, plain['stderr'])
+
     def test_pre_command_plain_shell_rejects_before_dependencies_or_side_effects(self):
         original_import = builtins.__import__
         imported = []

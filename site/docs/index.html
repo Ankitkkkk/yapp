@@ -7,7 +7,7 @@
 <meta name="description" content="Install yapp on Linux, macOS, or WSL2. Connect Claude Code and Codex, create a multi-agent session, learn terminal controls, and troubleshoot setup.">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="canonical" href="https://yapp.riggedcode.com/docs/">
-<meta name="theme-color" content="#6639c5">
+<meta name="theme-color" content="#215f44">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/logo-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/logo-192.png">
@@ -27,8 +27,8 @@
 <meta name="twitter:image" content="https://yapp.riggedcode.com/og.png">
 <meta name="twitter:image:alt" content="yapp: Claude and Codex coordinating in a shared terminal chat">
 <link rel="preload" href="/assets/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/assets/site.css?v=20261001">
-<script defer src="/assets/site.js?v=20261001"></script>
+<link rel="stylesheet" href="/assets/site.css?v=20261006">
+<script defer src="/assets/site.js?v=20261006"></script>
 <script type="application/ld+json">{
   "@context": "https://schema.org",
   "@graph": [
@@ -68,7 +68,7 @@
 <header class="wrap top">
   <a class="brand" href="/" aria-label="yapp home"><img src="/logo-192.png" alt="" width="34" height="34">yapp</a>
   <nav aria-label="Main navigation">
-    <a href="/#features">Features</a>
+    <a href="/features/">Features</a>
     <a href="/#start">Get started</a>
     <a href="/docs/" aria-current="page">Setup guide</a>
     <a class="nav-source" href="https://github.com/Ankitkkkk/yapp">GitHub <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 17 17 7M7 7h10v10"/></svg></a>
@@ -77,11 +77,11 @@
 <main id="main" tabindex="-1">
   <div class="wrap docs-top">
     <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">yapp</a> / Setup guide</nav>
-    <h1>Get your agents talking.</h1>
+    <h1>Install yapp. Bring your agents together.</h1>
     <p>Install yapp, connect your coding CLIs, and create your first shared session. This guide covers the terminal workflow on Linux, macOS, and WSL2.</p>
   </div>
   <div class="wrap docs-layout">
-    <nav class="docs-nav" aria-label="On this page"><p>In this guide</p><a href="#install">Install yapp</a><a href="#first-session">Your first session</a><a href="#commands">Commands &amp; controls</a><a href="#providers">Provider support</a><a href="#updates">Updates &amp; data</a><a href="#troubleshooting">Troubleshooting</a></nav>
+    <nav class="docs-nav" aria-label="On this page"><p>In this guide</p><a href="#install">Install yapp</a><a href="#first-session">Your first session</a><a href="#commands">Commands &amp; controls</a><a href="#markdown">Markdown &amp; copying</a><a href="#providers">Provider support</a><a href="#updates">Updates &amp; data</a><a href="#troubleshooting">Troubleshooting</a><a href="/features/">Explore all features ↗</a></nav>
     <div class="docs-content">
       <section id="install"><h2>Install yapp</h2>
         <p>You need <strong>tmux</strong> and <strong>curl</strong>. The installer uses Python 3.11+ if available, or downloads a private Python 3.13 when your system has only Python 3.10 or no Python. Use a terminal at least 80 columns by 18 rows. Install and authenticate the coding CLI you want to use separately.</p>
@@ -116,6 +116,7 @@ goon --help</code></pre></div>
           <li><strong>Send a task.</strong> Enter INSERT mode with <kbd>i</kbd>, type <code>@reviewer review the latest changes</code>, then press <kbd>Escape</kbd> followed by <kbd>Enter</kbd> to send. Unaddressed requests go to the enabled orchestrator.</li>
           <li><strong>Handle provider prompts.</strong> Press <kbd>F6</kbd>, choose the agent, and accept any trust or approval prompt in its own terminal.</li>
         </ol>
+        <p>In input forms, use <kbd>↑</kbd>/<kbd>↓</kbd> to move between fields and buttons. <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> cycles provider and other choices within a field. Working directories suggest matching folders as you type; Tab selects a suggestion and Enter accepts it. Press Enter again to submit, or use the arrows to continue editing.</p>
         <div class="note"><p><strong>Keep the agent running when you return.</strong> From an attached terminal outside tmux, press <kbd>Ctrl+B</kbd>, then <kbd>D</kbd> to detach. Inside tmux, use <code>tmux switch-client -l</code> to return to the previous session. Ctrl+C may stop the provider.</p></div>
         <p>Waiting indicators are advisory. The provider's terminal is the place to inspect and resolve approval prompts.</p>
       </section>
@@ -135,9 +136,15 @@ yapp send --session billing "@reviewer review the latest changes"</code></pre></
         <p>A plain <code>yapp new</code> creates the session without an orchestrator. To start one, use <code>yapp new billing --orchestrator-provider claude --cwd /absolute/project --json</code> instead of the first command.</p>
         <h3>Everyday keyboard controls</h3>
         <div class="table-scroll"><table><thead><tr><th scope="col">Key</th><th scope="col">Action</th></tr></thead><tbody>
-          <tr><td><kbd>F1</kbd></td><td>Open Help</td></tr><tr><td><kbd>F2</kbd></td><td>Switch sessions (or channels in channel-only chat)</td></tr><tr><td><kbd>F3</kbd></td><td>Choose or add an agent</td></tr><tr><td><kbd>F4</kbd></td><td>Open commands, including Loop guard and Update yapp</td></tr><tr><td><kbd>F5</kbd></td><td>Open Activity diagnostics</td></tr><tr><td><kbd>F6</kbd></td><td>Choose an agent terminal to attach</td></tr><tr><td><kbd>F7</kbd></td><td>Toggle terminal text selection</td></tr><tr><td><kbd>Ctrl+Q</kbd></td><td>Quit the TUI; server and agents keep running</td></tr>
+          <tr><td><kbd>F1</kbd></td><td>Open Help</td></tr><tr><td><kbd>F2</kbd></td><td>Switch sessions (or channels in channel-only chat)</td></tr><tr><td><kbd>F3</kbd></td><td>Choose or add an agent</td></tr><tr><td><kbd>F4</kbd></td><td>Open commands, including Loop guard and Update yapp</td></tr><tr><td><kbd>F5</kbd></td><td>Open Activity diagnostics</td></tr><tr><td><kbd>F6</kbd></td><td>Choose an agent terminal to attach</td></tr><tr><td><kbd>F7</kbd></td><td>Show raw Markdown for terminal text selection; press again to restore formatting</td></tr><tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Move between input-form fields and buttons</td></tr><tr><td><kbd>Tab</kbd> / <kbd>Shift+Tab</kbd></td><td>Cycle choices and directory suggestions inside forms; move between controls outside forms</td></tr><tr><td><kbd>Ctrl+Q</kbd></td><td>Quit the TUI; server and agents keep running</td></tr>
         </tbody></table></div>
         <p>Use <code>yapp --plain</code> for the scrolling terminal client. See the <a href="https://github.com/Ankitkkkk/yapp/blob/main/README.md#keyboard-controls">full keyboard reference</a> for editing and navigation.</p>
+      </section>
+      <section id="markdown"><h2>Read Markdown and copy its source</h2>
+        <p>The TUI renders headings, emphasis, lists, blockquotes, links, tables, and syntax-highlighted code in conversation, Activity, Help, agent details, and notices. On narrow terminals, tables stack their values. <a href="/#markdown">Compare formatted and raw text in the homepage demo</a>.</p>
+        <ol><li>Press <kbd>F7</kbd> to show original Markdown and pause message editing.</li><li>Select text using your terminal, then use its Copy shortcut, such as <kbd>Ctrl+Shift+C</kbd> in GNOME Terminal. Backticks and code indentation remain in the source.</li><li>Press <kbd>F7</kbd> again to restore formatting, scroll position, and your draft.</li></ol>
+        <p>F7 releases the app's mouse capture. Inside tmux, you may still need Shift-drag or tmux copy mode. Browser chat has a per-message raw Markdown copy button.</p>
+        <p>After upgrading, close and reopen the TUI to load the renderer. Source checkouts need the updated terminal dependencies: <code>.venv/bin/python -m pip install -r requirements-cli.txt</code>.</p>
       </section>
       <section id="providers"><h2>Provider support</h2>
         <p>yapp connects existing tools; it does not install provider CLIs, log in for you, or include their subscriptions.</p>
@@ -151,6 +158,10 @@ yapp send --session billing "@reviewer review the latest changes"</code></pre></
 yapp update</code></pre></div>
         <p>Set <code>YAPP_NO_AUTO_UPDATE=1</code> to disable automatic installation, or <code>YAPP_NO_UPDATE_CHECK=1</code> to disable checks. You can also set <code>auto = false</code> or <code>check = false</code> under <code>[updates]</code> in <code>config.local.toml</code>.</p>
         <p>Source checkouts are not automatically updated. Inspect local changes before pulling, update dependencies, and restart affected processes after accounting for active work.</p>
+        <h3>Install changes from your local checkout</h3>
+        <p>To copy a checkout's current code, including unpublished changes, into the installer's existing environment, run this from the repository root:</p>
+        <div class="command"><pre><code>YAPP_SOURCE="$PWD" sh install.sh</code></pre></div>
+        <p>Then close and reopen <code>yapp</code>. Use Restart server for server changes. <code>yapp update</code> follows published releases; it does not install uncommitted local edits.</p>
         <p>Package state lives under <code>~/.local/share/yapp/</code> by default (or <code>$XDG_DATA_HOME/yapp</code>). Source checkouts use <code>data/</code> and <code>uploads/</code>. Preserve those directories and your private configuration when upgrading.</p>
       </section>
       <section id="troubleshooting"><h2>Troubleshooting</h2>
@@ -167,7 +178,7 @@ yapp update</code></pre></div>
 <footer class="footer">
   <div class="wrap">
     <p>Open source under MIT. Built on <a href="https://github.com/bcurts/agentchattr">Agentchattr</a> by Ben Curtis.</p>
-    <nav aria-label="Footer"><a href="/docs/">Setup guide</a><a href="/llms.txt">For AI agents</a><a href="https://github.com/Ankitkkkk/yapp/issues">Report an issue</a><a href="https://github.com/Ankitkkkk/yapp">Source code</a></nav>
+    <nav aria-label="Footer"><a href="/features/">All features</a><a href="/docs/">Setup guide</a><a href="/llms.txt">For AI agents</a><a href="https://github.com/Ankitkkkk/yapp/issues">Report an issue</a><a href="https://github.com/Ankitkkkk/yapp">Source code</a></nav>
   </div>
 </footer>
 </body>

@@ -214,6 +214,13 @@ advertise `COLORTERM=truecolor` or `24bit` use RGB colors. Other terminals use
 their detected color depth; `PROMPT_TOOLKIT_COLOR_DEPTH` and `NO_COLOR` overrides
 are respected. Restart the TUI after updating to load the theme.
 
+Conversation messages, Activity, Help, and agent details render Markdown:
+headings, emphasis, lists, quotes, links, tables, and syntax-highlighted fenced
+code. Narrow tables stack their values to keep them readable. F7 copy mode
+shows the original Markdown source, including backticks and code indentation;
+press F7 again to restore formatting. Drafts and saved messages keep their
+original text. Source checkouts need the updated `requirements-cli.txt` installed.
+
 ### Keyboard controls
 
 | Key | Action |
@@ -225,7 +232,8 @@ are respected. Restart the TUI after updating to load the theme.
 | F6 | Choose an agent to attach; always opens the agent list |
 | F7 | Toggle terminal text selection: drag to select, use your terminal's Copy shortcut, then F7 to restore app mouse controls |
 | F1 | Open Help |
-| Tab / Shift+Tab | Move between visible controls |
+| Tab / Shift+Tab | Move between visible controls outside forms; in forms, cycle choices or directory suggestions |
+| Up / Down in forms | Move between editable fields and action buttons |
 | i / I | Enter INSERT mode at the cursor / first nonblank character |
 | a / A | Enter INSERT mode after the cursor / at the line end |
 | Enter | In INSERT: accept the highlighted completion or add a newline. In NORMAL: send the message. In dialogs: select the highlighted choice |
@@ -343,7 +351,14 @@ Each launch receives its assigned session
 name and channel explicitly; `none` history mode still delivers this identity
 prompt without requesting old chat. Subsequent triggers reinforce the current
 name, including after a rename. Click the directory or name input to edit it,
-or use Tab/Shift+Tab to move between fields. **F3 → Add agent** also remains available. Click an agent row and
+or use Up/Down to move between fields and action buttons. Choices show one
+selected value and its position in the list. Tab/Shift+Tab or the clickable
+chevrons cycle provider, history mode, role, and personality. Directory fields
+suggest matching folders as you type; Tab/Shift+Tab cycles suggestions without
+leaving the field. Enter accepts a highlighted suggestion; press Enter again
+to submit, or use Up/Down to keep that path and continue editing. The same
+controls work in New session and other input forms. **F3 → Add agent** also
+remains available. Click an agent row and
 then **Attach** to open its terminal directly. **F6** always opens the agent
 chooser, including after a previous selection or attach. Waiting agents show **Review input**
 in the same button position. **F3 → Attach** and the command palette also work.

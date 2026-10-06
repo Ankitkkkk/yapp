@@ -19,3 +19,19 @@ document.querySelectorAll('[data-copy]').forEach((button) => {
     }
   });
 });
+
+// This is an illustration of the TUI, not a Markdown parser or a live agent.
+document.querySelectorAll('[data-markdown-demo]').forEach((demo) => {
+  const button = demo.querySelector('[data-markdown-toggle]');
+  const formatted = demo.querySelector('[data-markdown-formatted]');
+  const raw = demo.querySelector('[data-markdown-raw]');
+  if (!button || !formatted || !raw) return;
+  button.hidden = false;
+  button.addEventListener('click', () => {
+    const showRaw = button.getAttribute('aria-pressed') !== 'true';
+    button.setAttribute('aria-pressed', String(showRaw));
+    formatted.hidden = showRaw;
+    raw.hidden = !showRaw;
+    button.textContent = showRaw ? 'F7 · Show formatted text' : 'F7 · Show raw Markdown';
+  });
+});

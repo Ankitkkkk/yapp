@@ -68,7 +68,7 @@ class TuiIntegrationTests(IsolatedCliServer, unittest.IsolatedAsyncioTestCase):
         await ui.activate_named('new_session')
         await ui.wait_until(lambda: 'Session name:' in ui.screen_text(), timeout=15)
         await ui.type_text(name)
-        await ui.key('Tab')
+        await ui.key('Down')
         await ui.key('Enter')
         await ui.wait_until(lambda: 'Orchestrator provider:' in ui.screen_text(), timeout=15)
         await ui.focus_field('cwd')
@@ -247,13 +247,13 @@ class _PtyCase(IsolatedCliServer):
 
     def focus_agent_cwd(self, terminal):
         for _ in range(len(self.provider_commands) + 1):
-            if '(*) kilo' in self.screen(terminal)['text']:
+            if '‹ kilo ›' in self.screen(terminal)['text']:
                 break
-            self.press(terminal, 'Down')
+            self.press(terminal, 'Tab')
         else:
             self.fail('Inert kilo provider cannot be selected')
-        self.assertIn('(*) kilo', self.screen(terminal)['text'])
-        return self.press(terminal, 'Tab')
+        self.assertIn('‹ kilo ›', self.screen(terminal)['text'])
+        return self.press(terminal, 'Down')
 
     def save(self, terminal, label):
         snapshot = self.screen(terminal)
@@ -318,7 +318,7 @@ class TuiPtyIntegrationTests(_PtyCase):
             self.screen(terminal, lambda s: 'Session name:' in s['text'])
             self.paste(terminal, 'pty-controls')
             self.press(terminal, 'Enter', lambda s: 'Orchestrator provider:' in s['text'])
-            self.press(terminal, 'Tab', lambda s: 'Working directory:' in s['text'])
+            self.press(terminal, 'Down', lambda s: 'Working directory:' in s['text'])
             self.press(terminal, 'Enter', lambda s: 'Connected' in s['text'] and 'Session name:' not in s['text'])
             session = next(w for w in self.api.list()['workspaces'] if w['name'] == 'pty-controls')
             self.addCleanup(self.archive_session, session['id'])
@@ -385,7 +385,7 @@ class TuiPtyIntegrationTests(_PtyCase):
             self.screen(terminal, lambda s: 'Working directory:' in s['text'])
             focused = self.focus_agent_cwd(terminal)
             self.write_artifact('pty-provider-focus.json', json.dumps({
-                'selected_kilo': '(*) kilo' in focused['text'],
+                'selected_kilo': '‹ kilo ›' in focused['text'],
                 'focused_buffer': focused['buffer'], 'expected_cwd': str(ROOT)}))
             self.assertEqual(focused['buffer'], str(ROOT),
                              'Working-directory focus required before editing or submitting')
@@ -537,8 +537,8 @@ class TuiTmuxIntegrationTests(_PtyCase):
             self.assertIn('< Resume agent >', refused['text'])
             self.assertEqual(self.api.get(self.session['id'])['agents'][0]['last_state'], 'exited')
             self.assertEqual(self.shim_log.read_text().splitlines(), launches_before)
-            self.press(terminal, 'Tab')
-            self.press(terminal, 'Down', lambda s: '(*) fresh' in s['text'])
+            self.press(terminal, 'Down')
+            self.press(terminal, 'Tab', lambda s: '‹ fresh ›' in s['text'])
             self.press(terminal, 'Enter', lambda s: 'Fresh launch for' in s['text'])
             self.assertEqual(self.shim_log.read_text().splitlines(), launches_before)
             terminal.send('y')

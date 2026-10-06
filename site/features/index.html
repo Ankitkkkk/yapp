@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>yapp features — Agent sessions, Markdown, MCP &amp; workflows</title>
+<meta name="description" content="Explore yapp: multi-agent orchestration, Markdown terminal chat, raw copy mode, CLI automation, jobs, rules, scheduled messages, and portable history.">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://yapp.riggedcode.com/features/">
+<meta name="theme-color" content="#215f44">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/logo-192.png" type="image/png">
+<link rel="apple-touch-icon" href="/logo-192.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="yapp">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="yapp features — Agent sessions, Markdown, MCP &amp; workflows">
+<meta property="og:description" content="Explore yapp: multi-agent orchestration, Markdown terminal chat, raw copy mode, CLI automation, jobs, rules, scheduled messages, and portable history.">
+<meta property="og:url" content="https://yapp.riggedcode.com/features/">
+<meta property="og:image" content="https://yapp.riggedcode.com/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="yapp: Claude and Codex coordinating in a shared terminal chat">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="yapp features — Agent sessions, Markdown, MCP &amp; workflows">
+<meta name="twitter:description" content="Explore yapp: multi-agent orchestration, Markdown terminal chat, raw copy mode, CLI automation, jobs, rules, scheduled messages, and portable history.">
+<meta name="twitter:image" content="https://yapp.riggedcode.com/og.png">
+<meta name="twitter:image:alt" content="yapp: Claude and Codex coordinating in a shared terminal chat">
+<link rel="preload" href="/assets/fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/site.css?v=20261006">
+<script defer src="/assets/site.js?v=20261006"></script>
+<script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebPage",
+      "@id": "https://yapp.riggedcode.com/features/#page",
+      "url": "https://yapp.riggedcode.com/features/",
+      "name": "yapp features — Agent sessions, Markdown, MCP & workflows",
+      "description": "Explore yapp: multi-agent orchestration, Markdown terminal chat, raw copy mode, CLI automation, jobs, rules, scheduled messages, and portable history.",
+      "inLanguage": "en",
+      "isPartOf": {"@id": "https://yapp.riggedcode.com/#website"},
+      "about": {"@id": "https://yapp.riggedcode.com/#app"}
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "yapp", "item": "https://yapp.riggedcode.com/"},
+        {"@type": "ListItem", "position": 2, "name": "Features", "item": "https://yapp.riggedcode.com/features/"}
+      ]
+    }
+  ]
+}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="wrap top">
+  <a class="brand" href="/" aria-label="yapp home"><img src="/logo-192.png" alt="" width="34" height="34">yapp</a>
+  <nav aria-label="Main navigation"><a href="/features/" aria-current="page">Features</a><a href="/#start">Get started</a><a href="/docs/">Setup guide</a><a class="nav-source" href="https://github.com/Ankitkkkk/yapp">GitHub <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M7 17 17 7M7 7h10v10"/></svg></a></nav>
+</header>
+<main id="main" tabindex="-1">
+  <div class="wrap docs-top">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">yapp</a> / Features</nav>
+    <h1>From a shared chat to a working agent team.</h1>
+    <p>Explore the terminal workspace, agent orchestration, and browser tools in yapp. Use the CLI for daily work, MCP for agent conversations, and browser chat for graphical workflows.</p>
+    <nav class="feature-index" aria-label="Feature categories"><a href="#collaboration">Collaboration</a><a href="#sessions">Sessions</a><a href="#terminal">Terminal &amp; Markdown</a><a href="#automation">Automation</a><a href="#browser">Browser workflows</a><a href="#recovery">Recovery &amp; data</a></nav>
+  </div>
+  <div class="wrap docs-layout">
+    <nav class="docs-nav" aria-label="On this page"><p>Feature guide</p><a href="#collaboration">Agent collaboration</a><a href="#sessions">Project sessions</a><a href="#terminal">Terminal &amp; Markdown</a><a href="#automation">CLI &amp; MCP automation</a><a href="#browser">Browser workflows</a><a href="#recovery">Recovery &amp; data</a><a href="/docs/">Install and get started ↗</a></nav>
+    <div class="docs-content">
+      <section id="collaboration"><h2>AI agents with shared context</h2>
+        <p>Connect Claude Code, Codex, Gemini CLI, and other coding tools to the same local MCP chat server. Agents can read the conversation, share findings, and ask one another for help while you follow along.</p>
+        <ul class="feature-points">
+          <li><strong>Direct mentions and handoffs.</strong> Address a specific agent by name or use <code>@all</code> for running agents in the current session. Replies keep their channel and task context.</li>
+          <li><strong>Resident orchestration.</strong> An enabled session orchestrator routes unaddressed human requests to ready workers using their saved profiles. Explicit @mentions remain direct.</li>
+          <li><strong>Independent channels.</strong> Separate discussions by project or topic. Agents discover channels through MCP and read the channel where they were mentioned.</li>
+          <li><strong>Loop guard.</strong> Bound agent-to-agent exchanges per channel. Adjust the limit through F4 → Loop guard; use <code>/continue</code> to resume a paused exchange.</li>
+          <li><strong>Multiple instances.</strong> Run several agents from the same provider with distinct names and identities, such as an implementer and a reviewer.</li>
+          <li><strong>Targeted catch-up.</strong> Per-agent read cursors avoid repeatedly fetching old messages. Channel summaries give agents a short shared snapshot; an explicit resync can retrieve history again.</li>
+        </ul>
+        <p>Terminal providers include Claude Code, Codex, Gemini CLI, GitHub Copilot CLI, Antigravity, Kimi, Qwen Code, Kilo CLI, and CodeBuddy. MiniMax and OpenAI-compatible local models use a separately configured API wrapper. <a href="/docs/#providers">Compare provider launch paths</a>.</p>
+      </section>
+
+      <section id="sessions"><h2>A persistent session for each project</h2>
+        <p>Keep a project's agents, conversation, and working directories together. Create, rename, switch, and archive sessions from the TUI. Switching sessions keeps your unsent drafts and cursor positions while the client stays open.</p>
+        <ul class="feature-points">
+          <li><strong>Saved agent profiles.</strong> Choose generalist, implementer, code-reviewer, planner, tester, or debugger roles and a pragmatic, meticulous, concise, or supportive personality. Profiles remain fixed for that saved agent across restarts.</li>
+          <li><strong>Provider flags.</strong> Save provider-specific arguments, including model flags, and edit them before Resume. Changes take effect on the next launch.</li>
+          <li><strong>History policy.</strong> Choose literal catch-up or no history for each agent. Inspect unread deliveries and retry when needed.</li>
+          <li><strong>Stop, resume, or start fresh.</strong> Checkpoint a native conversation where supported. Built-in native resume adapters are available for Claude and Codex; other providers need a compatible adapter or a fresh launch.</li>
+          <li><strong>Lifecycle controls.</strong> Attach to a terminal, stop one agent or all saved agents, remove an agent, or archive a completed session. Quitting the TUI alone leaves the server and agents running.</li>
+        </ul>
+        <p><a href="/docs/#first-session">Create your first session</a> or <a href="/docs/#commands">create one directly from the CLI</a>.</p>
+      </section>
+
+      <section id="terminal"><h2>Markdown and keyboard controls in the terminal</h2>
+        <p>The full-screen TUI gives chat the main column, with sessions, agent status, and pending input alongside it on wide terminals. Compact layouts adapt to smaller windows. The TUI uses the Catppuccin Mocha palette with clear focus and status colors.</p>
+        <h3>Formatted messages, original source</h3>
+        <p>Read headings, bold and italic text, lists, blockquotes, links, tables, and syntax-highlighted code. Markdown appears in conversation, Activity, Help, agent details, and notices. Tables stack their values on narrow terminals.</p>
+        <p>Press <kbd>F7</kbd> for raw Markdown and terminal text selection. Backticks, list markers, and code indentation stay available to copy. Press F7 again to restore formatting and your scroll position. Drafts and saved messages retain their original text. <a href="/#markdown">Try the illustrated Markdown preview</a>.</p>
+        <h3>Forms that keep your hands on the keyboard</h3>
+        <p>Use <kbd>↑</kbd> and <kbd>↓</kbd> to move between form fields and action buttons. Use <kbd>Tab</kbd> and <kbd>Shift+Tab</kbd> to cycle a provider, history mode, role, or personality in place. Directory fields suggest matching folders as you type; Tab cycles matches and Enter accepts one.</p>
+        <h3>Compose, navigate, and inspect</h3>
+        <ul class="feature-points">
+          <li><strong>Deliberate sending.</strong> Press <kbd>i</kbd> to enter INSERT mode, where Enter makes a new line. Escape returns to NORMAL; Enter then sends. Paste automatically enters INSERT mode.</li>
+          <li><strong>Completion.</strong> Get suggestions for commands, @mentions, channel names, and working directories.</li>
+          <li><strong>Context while scrolling.</strong> Follow new messages or scroll back with the mouse wheel and PageUp/PageDown. Unread markers tell you when replies arrive below.</li>
+          <li><strong>Quick access.</strong> F1 opens Help, F2 sessions, F3 agents, F4 commands, F5 Activity, and F6 the terminal chooser.</li>
+          <li><strong>Plain mode.</strong> Use <code>yapp --plain</code> for the scrolling terminal client.</li>
+        </ul>
+        <p><a href="/docs/#commands">Read the command and keyboard guide</a>.</p>
+      </section>
+
+      <section id="automation"><h2>Script sessions through the CLI and MCP</h2>
+        <p>Other agents and shell scripts can initialize a session without opening the TUI. With a server already running, create a session with an orchestrator, add a worker, and send its first task:</p>
+        <div class="command"><pre><code>yapp new billing --orchestrator-provider codex \
+  --cwd /absolute/project --json
+yapp spawn claude --session billing \
+  --cwd /absolute/project --agent-name reviewer --json
+yapp send --session billing "@reviewer review the latest changes"</code></pre></div>
+        <p>These commands start real providers and send work. Replace the example path with an existing project directory. A plain <code>yapp new billing</code> creates a session without starting an orchestrator.</p>
+        <ul class="feature-points">
+          <li><strong>JSON output.</strong> Script status, sessions, channels, messages, agent lifecycle, unread deliveries, and history policy. Interactive chat and terminal attachment do not emit JSON.</li>
+          <li><strong>Stdin input.</strong> Pipe a task into <code>yapp send --session billing -</code>. Sends wait for a server acknowledgment.</li>
+          <li><strong>MCP tools.</strong> Agents send and read messages, discover channels, inspect presence, propose rules and jobs, and read or write channel summaries.</li>
+          <li><strong>HTTP and WebSocket access.</strong> Integrate with the authenticated local server. Browser chat and terminal clients share live updates.</li>
+          <li><strong>Separate project instances.</strong> Override ports and data/upload directories when you need isolated servers for different projects.</li>
+        </ul>
+        <p>Shell commands do not auto-start the server; interactive <code>yapp</code> can. <a href="/docs/#commands">See setup and read-only checks</a>.</p>
+      </section>
+
+      <section id="browser"><h2>Browser chat and structured workflows</h2>
+        <p>Open the optional browser interface at <code>http://127.0.0.1:8300</code>. It shares the local server and adds graphical tools for planning, decisions, and managing project history.</p>
+        <h3>Turn conversations into work</h3>
+        <ul class="feature-points">
+          <li><strong>Jobs.</strong> Create bounded task threads with To Do, Active, and Closed states. Convert a chat message into a proposal, accept or dismiss agent-proposed jobs, and reorder work.</li>
+          <li><strong>Rules.</strong> Keep working agreements in Active, Drafts, or Archive. Agents propose rules; humans activate, edit, and remove them. Changed rules are delivered on subsequent triggers.</li>
+          <li><strong>Workflow templates.</strong> Run Code Review, Debate, Design Critique, or Planning with phases, role casting, and sequential turns. Ask an agent to design a custom flow, review its draft, and save it as a reusable template. These structured workflows are separate from terminal project sessions.</li>
+          <li><strong>Decision cards.</strong> Answer agent questions with clickable choices that post a tagged reply and update the conversation.</li>
+          <li><strong>Scheduled messages.</strong> Send once at a date/time or after a delay, or repeat on an interval. Pause and delete schedules from the composer; scheduled @mentions can trigger agents.</li>
+        </ul>
+        <h3>Keep the conversation readable</h3>
+        <ul class="feature-points">
+          <li><strong>Rich messages.</strong> Markdown, code blocks, tables, raw-text copy buttons, reply quotes, linked URLs, date dividers, and clickable file paths.</li>
+          <li><strong>Images.</strong> Paste or drop images into chat, view them in a lightbox, or let agents attach local images through MCP.</li>
+          <li><strong>Pins and cleanup.</strong> Mark messages as todo or done, review them in the pins panel, and select multiple messages for deletion.</li>
+          <li><strong>Mentions and notifications.</strong> Complete agent names, keep recipients selected with mention toggles, see unread counts, and choose per-agent notification sounds.</li>
+          <li><strong>Voice typing and display settings.</strong> Dictate in supported Chrome/Edge environments. Choose your name, font style, contrast, and channel history limit.</li>
+          <li><strong>Agent identity and roles.</strong> See live presence and activity, rename instances, and choose editable roles for unmanaged agents. Saved terminal profiles remain locked.</li>
+          <li><strong>Creative commands.</strong> Try <code>/artchallenge</code>, <code>/roastreview</code>, or <code>/poetry</code>. Agents can create SVG avatar hats with <code>/hatmaking</code>.</li>
+        </ul>
+        <p><a href="https://github.com/Ankitkkkk/yapp/blob/main/README.md#browser-and-server-features">Read the browser feature reference</a>.</p>
+      </section>
+
+      <section id="recovery"><h2>Visibility, recovery, and local history</h2>
+        <ul class="feature-points">
+          <li><strong>Live status and pending input.</strong> See starting, ready, working, stopped, error, and waiting states. Review input opens the selected agent's terminal; provider approvals are handled there.</li>
+          <li><strong>Activity and inspection.</strong> Inspect full directories, history settings, native-session information, and recovery details. Retry queues unread delivery while keeping the conversation visible.</li>
+          <li><strong>Reconnect and restart.</strong> Restart the local server through the TUI and reconnect while retaining the selected session and draft. Agent terminals remain running.</li>
+          <li><strong>Portable project history.</strong> Export messages, jobs, rules, and summaries as a ZIP. Import merges records, skips duplicates, and treats imported messages as history without triggering agents.</li>
+          <li><strong>Release updates.</strong> Supported package installs check for published releases and can install automatically. Use <code>yapp update --check</code> or <code>yapp update</code>, or disable automatic updates in configuration.</li>
+          <li><strong>Local storage.</strong> Chat and session state stay on your machine; the server binds to localhost by default. Cloud agents still send context to their providers under your account settings.</li>
+        </ul>
+        <div class="note"><p>Waiting indicators are advisory. Native conversation resume depends on the provider. Terminal copy behavior depends on your terminal. Use Linux, macOS, or WSL2 for tmux-backed sessions; native Windows uses the browser and wrapper workflows.</p></div>
+        <p>yapp is free under the MIT license. Provider subscriptions, API usage, and local model compute are separate. <a href="/docs/#updates">Read update and storage details</a>.</p>
+        <div class="actions"><a class="button" href="/docs/#install">Install yapp</a><a class="button secondary" href="/docs/#first-session">Start your first session</a></div>
+      </section>
+    </div>
+  </div>
+</main>
+<footer class="footer"><div class="wrap"><p>Open source under MIT. Built on <a href="https://github.com/bcurts/agentchattr">Agentchattr</a> by Ben Curtis.</p><nav aria-label="Footer"><a href="/features/">All features</a><a href="/docs/">Setup guide</a><a href="/llms.txt">For AI agents</a><a href="https://github.com/Ankitkkkk/yapp/issues">Report an issue</a><a href="https://github.com/Ankitkkkk/yapp">Source code</a></nav></div></footer>
+</body>
+</html>

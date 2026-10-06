@@ -576,6 +576,12 @@ def main(argv=None, *, prog=None):
                                        stdout_tty=sys.stdout.isatty(),
                                        platform=sys.platform,
                                        term=os.environ.get("TERM"))
+        if mode == 'tui':
+            try:
+                from rich.markdown import Markdown  # noqa: F401
+                from markdown_it import MarkdownIt  # noqa: F401
+            except ImportError:
+                parser.exit(1, "Install terminal dependencies: python -m pip install -r requirements-cli.txt\n")
         if mode == "plain" and not args.plain:
             print("Full-screen unavailable; using plain mode.", file=sys.stderr)
     elif args.command == "send" and args.message == ["-"]:

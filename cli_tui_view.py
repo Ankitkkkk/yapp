@@ -26,6 +26,7 @@ from prompt_toolkit.widgets import Box, Button, Frame, TextArea
 
 from cli_tui_state import MAX_DRAFT_BYTES, body_text, clip_cells, label_text, layout_mode
 from cli_tui_theme import TUI_STYLE
+from cli_tui_markdown import join_lines, markdown_lines, wrap_plain as _wrap
 from cli_view_contracts import channel_transcript
 from cli_workspace_chat import SESSION_COMMANDS, SESSION_HELP, _timestamp
 from cli_workspaces import WINDOWS_TMUX_ERROR
@@ -50,37 +51,6 @@ class _PaneButton(Button):
                 fragments[index] = (style, label.ljust(self.width - 2), *extra)
         fragments[0] = (fragments[0][0], '›' if focused else ' ', *fragments[0][2:])
         return fragments
-
-
-def _wrap(text, width):
-    """Wrap by terminal cells, keeping words intact whenever they fit."""
-    width = max(1, width)
-    for line in body_text(text).split('\n'):
-        part, used = '', 0
-        for match in re.finditer(r'\s+|\S+', line):
-            token = match.group()
-            cells = get_cwidth(token)
-            if cells <= width:
-                if used + cells > width:
-                    yield part.rstrip()
-                    part, used = '', 0
-                    if token.isspace():
-                        continue
-                part += token
-                used += cells
-                continue
-            if part:
-                yield part.rstrip()
-                part, used = '', 0
-            for char in token:
-                cells = max(0, get_cwidth(char))
-                if used + cells > width and part:
-                    yield part
-                    part, used = '', 0
-                if cells <= width:
-                    part += char
-                    used += cells
-        yield part
 
 
 class _MentionLexer(Lexer):
@@ -230,7 +200,10 @@ class _ConversationControl(UIControl):
             for line in _wrap(text, content_width):
                 yield [('class:chat.gutter', gutter), (text_style, line)]
 
-        yield from body_lines(message.get('text', ''), 'class:muted' if system else '')
+        for line in markdown_lines(message.get('text', ''), content_width,
+                                   raw=self.view.selecting_text):
+            yield [('class:chat.gutter', gutter),
+                   *((('class:muted ' if system else '') + style, text) for style, text in line)]
         for attachment in message.get('attachments', []):
             name = label_text(attachment.get('name', ''))
             url = label_text(attachment.get('url', ''))
@@ -282,7 +255,8 @@ class _ConversationControl(UIControl):
                 if not visible and tail:
                     line_index, line = tail[0]
                     self._visible_start = (ident, line_index)
-                    viewport.line_offset = line_index
+                    if not self.view.selecting_text:
+                        viewport.line_offset = line_index
                     lines.append(line)
         return list(lines) or [[('class:muted', 'No messages yet. Write in Message below.')]]
 
@@ -306,12 +280,14 @@ class _ActivityControl(UIControl):
 
     def create_content(self, width, height):
         self.height = max(1, height)
-        lines = [line for notice in self.view.state.notices.lines for line in _wrap(notice, width)]
-        lines = lines or ['No activity yet. Esc returns to conversation.']
+        text = '\n'.join(self.view.state.notices.lines) or 'No activity yet. Esc returns to conversation.'
+        lines = markdown_lines(text, width, raw=self.view.selecting_text)
         self.view._activity_max_line = max(0, len(lines) - self.height)
-        self.view._activity_line = min(self.view._activity_line, self.view._activity_max_line)
-        visible = lines[self.view._activity_line:self.view._activity_line + self.height]
-        return UIContent(get_line=lambda index: [('', visible[index])],
+        offset = min(self.view._activity_line, self.view._activity_max_line)
+        if not self.view.selecting_text:
+            self.view._activity_line = offset
+        visible = lines[offset:offset + self.height]
+        return UIContent(get_line=lambda index: visible[index],
                          line_count=len(visible), show_cursor=False)
 
 
@@ -326,11 +302,13 @@ class _HelpControl(UIControl):
 
     def create_content(self, width, height):
         self.height = max(1, height)
-        lines = list(_wrap(self.view._help_text, width))
+        lines = markdown_lines(self.view._help_text, width, raw=self.view.selecting_text)
         self.last_line = max(0, len(lines) - self.height)
-        self.view._help_line = min(self.view._help_line, self.last_line)
-        visible = lines[self.view._help_line:self.view._help_line + self.height]
-        return UIContent(get_line=lambda index: [('', visible[index])],
+        offset = min(self.view._help_line, self.last_line)
+        if not self.view.selecting_text:
+            self.view._help_line = offset
+        visible = lines[offset:offset + self.height]
+        return UIContent(get_line=lambda index: visible[index],
                          line_count=len(visible), show_cursor=False)
 
 
@@ -1002,8 +980,11 @@ class TuiView:
 
     def _notice_text(self):
         latest = self.state.notices.lines[-1] if self.state.notices.lines else ''
-        return [('class:notice', clip_cells('Notice: ' + body_text(latest),
-                                         self._app().output.get_size().columns))]
+        width = max(1, self._app().output.get_size().columns - len('Notice: '))
+        lines = markdown_lines(latest, width, raw=self.selecting_text)
+        line = next((line for line in lines if any(text.strip() for _, text in line)), lines[0])
+        return [('class:notice', 'Notice: '),
+                *(('class:notice ' + style, text) for style, text in line)]
 
     def show_activity(self):
         """Open the read-only NoticeStore surface, retaining prior chat focus."""
@@ -1099,7 +1080,8 @@ class TuiView:
         for key, caption in [('cwd', 'Working directory'), ('history_note', 'History'),
                              ('last_error', 'Error')]:
             if agent.get(key):
-                lines.append(caption + ': ' + body_text(agent[key]))
+                separator = ': ' if key == 'cwd' else ':\n'
+                lines.append(caption + separator + body_text(agent[key]))
         return '\n'.join(lines)
 
     def show_inspector(self):
@@ -1276,9 +1258,11 @@ class TuiView:
     def _agent_fragments(self):
         if self.inspecting:
             width = self._agent_content_width()
-            lines = list(_wrap(self.inspector_text(), width))
-            self._inspector_line = min(self._inspector_line, max(0, len(lines) - 1))
-            return [('', '\n'.join(lines[self._inspector_line:]))]
+            lines = markdown_lines(self.inspector_text(), width, raw=self.selecting_text)
+            offset = min(self._inspector_line, max(0, len(lines) - 1))
+            if not self.selecting_text:
+                self._inspector_line = offset
+            return join_lines(lines[offset:])
         agents = self.agent_rows()
         if not agents:
             return [('class:muted', 'No agents.\nClick Add agent\nto start.' if self.screen_mode == 'wide'
@@ -1469,7 +1453,7 @@ class TuiView:
 
         @self.global_key_bindings.add('f7', eager=copying, filter=Condition(lambda:
             self.selecting_text or self.screen_mode != 'small'
-            and self.dialogs.future is None and not self.help_visible))
+            and self.dialogs.future is None))
         def select_text(event):
             # Let the terminal own drag selection and its native clipboard shortcut.
             self.selecting_text = not self.selecting_text

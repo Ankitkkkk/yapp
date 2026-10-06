@@ -31,7 +31,7 @@ class TuiHarness:
     """Bounded render waits and controlled callbacks; no network or provider startup."""
 
     sequences = {'F1': '\x1bOP', 'F2': '\x1bOQ', 'F3': '\x1bOR', 'F4': '\x1bOS', 'F5': '\x1b[15~',
-                 'Enter': '\r', 'Escape': '\x1b', 'CtrlQ': '\x11', 'CtrlC': '\x03',
+                 'F7': '\x1b[18~', 'Enter': '\r', 'Escape': '\x1b', 'CtrlQ': '\x11', 'CtrlC': '\x03',
                  'CtrlD': '\x04', 'AltEnter': '\x1b\r', 'Left': '\x1b[D', 'Right': '\x1b[C', 'CtrlSpace': '\x00', 'Tab': '\t', 'ShiftTab': '\x1b[Z', 'Home': '\x1b[H', 'End': '\x1b[F',
                  'PageUp': '\x1b[5~', 'PageDown': '\x1b[6~', 'Up': '\x1b[A', 'Down': '\x1b[B'}
 
@@ -217,7 +217,7 @@ class TuiHarness:
 
     async def focus_field(self, name):
         captions = {'launch_mode': 'Launch mode:', 'cwd': 'Working directory',
-                    'name': 'Agent name', 'mode': 'History mode [none/literal]:', 'provider': 'Provider:'}
+                    'name': 'Agent name', 'mode': 'History mode:', 'provider': 'Provider:'}
         found, target = False, None
         for container in walk(self.dialogs.body, skip_hidden=True):
             if not isinstance(container, Window):
@@ -235,8 +235,8 @@ class TuiHarness:
         for _ in range(30):
             if self.application.layout.current_control is target:
                 return
-            await self.key('Tab')
-        raise AssertionError('Field cannot be reached by Tab: ' + name)
+            await self.key('Down')
+        raise AssertionError('Field cannot be reached by Down: ' + name)
 
     async def select_row(self, ident):
         """Search and activate only after asserting the full highlighted ID."""

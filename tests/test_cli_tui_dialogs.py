@@ -144,7 +144,7 @@ class DialogTests(unittest.IsolatedAsyncioTestCase):
         return '\n'.join(''.join(cell.char for _, cell in sorted(row.items()))
                          for _, row in sorted(screen.data_buffer.items()))
 
-    async def test_form_typing_tab_backtab_and_radio_default(self):
+    async def test_form_typing_arrows_and_radio_default(self):
         async with self.dialog_application() as (host, pipe):
             answer = self.request(host.form('Agent', [
                 Field('name', 'Name', required=True),
@@ -152,7 +152,7 @@ class DialogTests(unittest.IsolatedAsyncioTestCase):
                       choices=('local-a', 'local-z'), required=True),
             ], submit_label='Start'))
             await self.wait_modal(host)
-            pipe.send_text(' ynaq \t\x1b[Z!\t\r')
+            pipe.send_text(' ynaq \x1b[B\x1b[A!\x1b[B\r')
             result = await self.result(answer)
             self.assertEqual(result, ModalResult({'name': ' ynaq !',
                                                   'provider': 'local-z'}))
@@ -173,7 +173,7 @@ class DialogTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_form_choice_navigation_and_first_configured_default(self):
         async with self.dialog_application() as (host, pipe):
-            for keys, expected in [('\r', 'inert-first'), ('\x1b[B\r', 'inert-next')]:
+            for keys, expected in [('\r', 'inert-first'), ('\t\r', 'inert-next')]:
                 answer = self.request(host.form('Providers', [Field(
                     'provider', 'Provider', choices=('inert-first', 'inert-next'))],
                     submit_label='Use'))
@@ -376,12 +376,12 @@ class DialogTests(unittest.IsolatedAsyncioTestCase):
             pipe.send_text('\t\r')
             self.assertFalse(await self.result(answer))
 
-    async def test_form_tab_enter_cancel_keeps_draft(self):
+    async def test_form_down_enter_cancel_keeps_draft(self):
         async with self.dialog_application() as (host, pipe):
             answer = self.request(host.form('Name', [Field('name', 'Name')],
                                             submit_label='Save'))
             await self.wait_modal(host)
-            pipe.send_text('draft\t\t\r')
+            pipe.send_text('draft\x1b[B\x1b[B\r')
             self.assertEqual(await self.result(answer), ModalResult(cancelled=True))
             self.assertEqual(self.composer.text, 'draft')
 

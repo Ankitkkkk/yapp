@@ -41,9 +41,24 @@ def check(browser, base, artifacts):
         assert page.evaluate('window.getSelection().toString()') == INSTALL
         assert 'selected' in page.get_by_role('status').inner_text().lower()
 
-        for width in (360, 768, 1440):
+        # The illustration must switch both visual content and accessible state.
+        toggle = page.locator('[data-markdown-toggle]')
+        assert toggle.inner_text() == 'F7 · Show raw Markdown'
+        assert page.locator('[data-markdown-formatted]').is_visible()
+        toggle.click()
+        assert toggle.get_attribute('aria-pressed') == 'true'
+        assert toggle.inner_text() == 'F7 · Show formatted text'
+        assert not page.locator('[data-markdown-formatted]').is_visible()
+        assert '```python' in page.locator('[data-markdown-raw]').inner_text()
+        assert page.locator('[data-markdown-raw]').is_visible()
+        toggle.press('Enter')
+        assert toggle.get_attribute('aria-pressed') == 'false'
+        assert page.locator('[data-markdown-formatted]').is_visible()
+        assert not page.locator('[data-markdown-raw]').is_visible()
+
+        for width in (320, 360, 768, 1440):
             page.set_viewport_size({'width': width, 'height': 960})
-            for path in ('/', '/docs/', '/404.html'):
+            for path in ('/', '/features/', '/docs/', '/404.html'):
                 response = page.goto(base + path)
                 assert response.status == 200, path
                 assert page.locator('h1').count() == 1, path
@@ -67,8 +82,12 @@ def check(browser, base, artifacts):
         page.locator('details summary').first.click()
         assert page.locator('details[open]').count()
         page.emulate_media(color_scheme='dark', reduced_motion='reduce')
-        if artifacts:
-            page.screenshot(path=str(artifacts / 'home-dark.png'), full_page=True)
+        for path in ('/', '/features/', '/docs/', '/404.html'):
+            page.goto(base + path)
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), path
+            if artifacts:
+                name = 'home' if path == '/' else path.strip('/').replace('.', '-')
+                page.screenshot(path=str(artifacts / f'{name}-dark.png'), full_page=True)
         assert not errors, errors
     finally:
         context.close()
@@ -79,6 +98,11 @@ def check(browser, base, artifacts):
         page = context.new_page()
         page.goto(base)
         assert page.get_by_text(INSTALL, exact=True).count()
+        assert page.locator('[data-markdown-formatted]').is_visible()
+        assert not page.locator('[data-markdown-toggle]').is_visible()
+        page.get_by_role('link', name='Features', exact=True).first.click()
+        assert page.url.endswith('/features/')
+        assert page.locator('#terminal').inner_text()
         page.get_by_role('link', name='Setup guide', exact=True).first.click()
         assert page.url.endswith('/docs/')
         assert page.locator('main').inner_text()
@@ -111,7 +135,7 @@ def main():
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
-    print('PASS: clipboard, keyboard, responsive layouts, local links, dark mode, and no-JS navigation')
+    print('PASS: clipboard, Markdown demo, keyboard, responsive layouts, local links, dark mode, and no-JS navigation')
 
 
 if __name__ == '__main__':

@@ -8,6 +8,8 @@ on:
       - "llms.txt"
       - "install.sh"
       - ".github/workflows/pages.yml"
+      - "tests/check_site.py"
+      - "tests/browser/site.py"
   workflow_dispatch:
 
 permissions:
@@ -24,6 +26,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check pages, metadata, and local links
+        run: python3 tests/check_site.py
+      - name: Set up isolated browser checks
+        run: |
+          python3 -m venv "$RUNNER_TEMP/yapp-site-check"
+          "$RUNNER_TEMP/yapp-site-check/bin/pip" install playwright
+          "$RUNNER_TEMP/yapp-site-check/bin/python" -m playwright install --with-deps chromium
+      - name: Check website in Chromium
+        run: '"$RUNNER_TEMP/yapp-site-check/bin/python" tests/browser/site.py --artifacts "$RUNNER_TEMP/yapp-site-screens"'
+      - name: Retain website screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: website-screenshots
+          path: ${{ runner.temp }}/yapp-site-screens
+          if-no-files-found: ignore
+          retention-days: 7
       # llms.txt and install.sh live at the repo root; publish the same files on the site.
       - run: cp llms.txt install.sh site/
       - uses: actions/configure-pages@v5

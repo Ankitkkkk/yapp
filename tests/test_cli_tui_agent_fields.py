@@ -11,8 +11,8 @@ class AgentFieldTests(unittest.IsolatedAsyncioTestCase):
         screen = ui.screen_text()
         for text in ('Role:', 'generalist', 'Personality:', 'pragmatic', 'Start agent'):
             self.assertIn(text, screen)
-        await ui.key('Tab')
-        await ui.key('Tab')
+        await ui.key('Down')
+        await ui.key('Down')
         await ui.key('Enter')
 
     async def test_resume_directory_is_prefilled_read_only_and_uses_saved_directory(self):

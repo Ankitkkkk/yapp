@@ -7,6 +7,7 @@ from bisect import bisect_right
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from prompt_toolkit.completion import Completion, PathCompleter, ThreadedCompleter
 from prompt_toolkit.mouse_events import MouseEventType
 from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.application.current import get_app
@@ -14,12 +15,14 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.utils import get_cwidth
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.key_binding.bindings.focus import focus_next, focus_previous
-from prompt_toolkit.layout import FloatContainer, HSplit, ScrollablePane, VSplit, Window
+from prompt_toolkit.layout import (ConditionalContainer, Float, FloatContainer,
+                                   HSplit, ScrollablePane, VSplit, Window)
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.layout.layout import walk
+from prompt_toolkit.layout.menus import CompletionsMenu
 from prompt_toolkit.layout.processors import Processor, Transformation
-from prompt_toolkit.widgets import Button, Dialog, Label, RadioList, TextArea
+from prompt_toolkit.widgets import Button, Dialog, Label, TextArea
 
 from cli_api import CLIError
 from provider_args import parse_provider_flags
@@ -56,6 +59,59 @@ class Field:
     choices: tuple = ()
     required: bool = False
     read_only: bool = False
+    directory: bool = False
+
+
+class _DirectoryCompleter(PathCompleter):
+    """Suggest directories with safe labels while preserving raw path values."""
+
+    def __init__(self):
+        super().__init__(only_directories=True)
+
+    def get_completions(self, document, complete_event):
+        # Completing a prefix in the middle would duplicate the remaining path.
+        if document.text_after_cursor:
+            return
+        for completion in super().get_completions(document, complete_event):
+            yield Completion(completion.text, start_position=completion.start_position,
+                             display=label_text(completion.display_text))
+
+
+class _ChoiceInput:
+    """One-line choice with keyboard cycling and clickable previous/next arrows."""
+
+    def __init__(self, choices, default='', *, read_only=False):
+        self.choices = tuple(choices)
+        self.current_value = default if default in self.choices else self.choices[0]
+        self.read_only = read_only
+        bindings = KeyBindings()
+        bindings.add(' ')(lambda event: self.cycle(1))
+        self.control = FormattedTextControl(self._fragments, focusable=True,
+                                            key_bindings=bindings)
+        self.window = Window(self.control, height=1, dont_extend_height=True)
+        _style_input(self, read_only=read_only)
+
+    def cycle(self, offset):
+        if not self.read_only:
+            index = (self.choices.index(self.current_value) + offset) % len(self.choices)
+            self.current_value = self.choices[index]
+
+    def _mouse(self, event, offset=0):
+        if event.event_type != MouseEventType.MOUSE_UP:
+            return NotImplemented
+        get_app().layout.focus(self)
+        self.cycle(offset)
+
+    def _fragments(self):
+        index = self.choices.index(self.current_value) + 1
+        return [('', '‹ ', lambda event: self._mouse(event, -1)),
+                ('[SetCursorPosition]', ''),
+                ('', label_text(self.current_value), self._mouse),
+                ('', ' ›', lambda event: self._mouse(event, 1)),
+                ('', f'  {index}/{len(self.choices)}', self._mouse)]
+
+    def __pt_container__(self):
+        return self.window
 
 
 class _SafeInput(Processor):
@@ -130,8 +186,12 @@ class DialogHost:
         self._owner = asyncio.current_task()
         self._saved_focus = app.layout.current_control
         self._cancel_value = cancel_value
-        self.float = FloatContainer(content=content, floats=[], modal=True,
-                                    key_bindings=bindings)
+        # Cursor-relative root floats draw near 10**8. The completion window
+        # must paint after the modal itself, including its hint and buttons.
+        self.float = FloatContainer(content=content, modal=True, key_bindings=bindings,
+            floats=[Float(xcursor=True, ycursor=True,
+                          content=CompletionsMenu(max_height=6, scroll_offset=1,
+                                                  z_index=10**9))])
         try:
             app.layout.update_parents_relations()
             app.layout.focus(focus)
@@ -210,25 +270,30 @@ class DialogHost:
         # fields can be clipped on short terminals, hiding a failed submission.
         error_label = Label(body_text(error) if error else '', style='class:dialog.error')
         rows = []
+        choice_label_width = max((get_cwidth(label_text(field.label)) + 2
+                                  for field in fields if field.choices), default=20)
         for field in fields:
             if field.choices:
-                control = RadioList([(value, label_text(value)) for value in field.choices],
-                                    default=field.default, select_on_focus=True,
-                                    show_scrollbar=False)
-                control.window.height = Dimension.exact(len(field.choices))
+                control = _ChoiceInput(field.choices, field.default, read_only=field.read_only)
+                rows.append(VSplit([Label(label_text(field.label), width=choice_label_width), control]))
             else:
                 control = TextArea(text=field.default, multiline=False, height=1,
                                    read_only=field.read_only,
                                    focus_on_click=True,
+                                   completer=(ThreadedCompleter(_DirectoryCompleter())
+                                              if field.directory and not field.read_only else None),
+                                   complete_while_typing=field.directory and not field.read_only,
                                    input_processors=[_SafeInput()])
                 _style_input(control, read_only=field.read_only)
+                if field.directory:
+                    control.buffer.cursor_position = len(control.text)
+                rows.append(HSplit([Label(label_text(field.label)), control]))
             controls[field.name] = control
-            rows.extend([Label(label_text(field.label)), control])
         if description:
             rows.append(Label(body_text(description)))
 
         def submit():
-            values = {name: (control.current_value if isinstance(control, RadioList)
+            values = {name: (control.current_value if isinstance(control, _ChoiceInput)
                              else control.text) for name, control in controls.items()}
             for field in fields:
                 if field.required and not values[field.name].strip():
@@ -242,16 +307,63 @@ class DialogHost:
                                width=max(12, get_cwidth(label_text(submit_label)) + 4), handler=submit)
         cancel_button = Button('Cancel', handler=self.cancel)
         bindings = self._bindings(cancelled)
+        focus_order = [controls[field.name] for field in fields if not field.read_only]
+        focus_order.extend([submit_button, cancel_button])
+
+        @bindings.add('up', eager=True)
+        @bindings.add('down', eager=True)
+        def move_field(event):
+            # Keep the selected completion when leaving; arrows always move
+            # between fields, even while the directory menu is open.
+            event.current_buffer.complete_state = None
+            offset = -1 if event.key_sequence[-1].key == 'up' else 1
+            current = next((i for i, control in enumerate(focus_order)
+                            if event.app.layout.has_focus(control)), None)
+            target = (current + offset) % len(focus_order) if current is not None else (
+                0 if offset > 0 else len(focus_order) - 1)
+            event.app.layout.focus(focus_order[target])
+
+        @bindings.add('tab', eager=True)
+        @bindings.add('s-tab', eager=True)
+        def cycle_value(event):
+            backwards = event.key_sequence[-1].key == 's-tab'
+            field = next((field for field in fields
+                          if event.app.layout.has_focus(controls[field.name])), None)
+            if field is None or field.read_only:
+                return
+            control = controls[field.name]
+            if isinstance(control, _ChoiceInput):
+                control.cycle(-1 if backwards else 1)
+            elif field.directory:
+                buffer = control.buffer
+                if buffer.complete_state:
+                    if backwards:
+                        buffer.complete_previous()
+                    else:
+                        buffer.complete_next()
+                else:
+                    buffer.start_completion(select_first=not backwards,
+                                            select_last=backwards)
 
         @bindings.add('enter', filter=~has_focus(cancel_button), eager=True)
         def accept(event):
+            completion = event.current_buffer.complete_state
+            if completion is not None and completion.current_completion is not None:
+                event.current_buffer.complete_state = None
+                return
             submit()
 
-        # Let each list show its choices. On short terminals scroll the fields
-        # together, keeping validation and action buttons outside the viewport.
-        body = HSplit([error_label, ScrollablePane(HSplit(rows))])
+        # Collapse spacing on short terminals. Validation and actions remain
+        # outside the scrollable fields, even when an error needs extra lines.
+        field_rows = HSplit(rows, padding=lambda: (
+            1 if self.app_getter().output.get_size().rows >= 24 else 0))
+        body = HSplit([
+            ConditionalContainer(error_label, filter=Condition(lambda: bool(error_label.text))),
+            ScrollablePane(field_rows, show_scrollbar=False),
+            Label('↑↓ fields · Tab/Shift+Tab choices/paths · Enter submit · Esc cancel')])
         dialog = Dialog(title=label_text(title), body=body,
-                        buttons=[submit_button, cancel_button], modal=False)
+                        buttons=[submit_button, cancel_button], modal=False,
+                        width=Dimension(preferred=76, max=88))
         first = next((controls[field.name] for field in fields if not field.read_only), submit_button)
         return await self._open(dialog, bindings, first, cancelled)
 
@@ -661,7 +773,8 @@ class TuiWorkflows:
         last_cwd = next((a.get('cwd') for a in reversed(self.view.agent_rows()) if a.get('cwd')), None)
         orchestrator_fields = [
             Field('provider', 'Orchestrator provider:', choices=tuple(self.controller.providers), required=True),
-            Field('cwd', 'Working directory:', default=last_cwd or str(Path.cwd()), required=True),
+            Field('cwd', 'Working directory:', default=last_cwd or str(Path.cwd()),
+                  required=True, directory=True),
             Field('provider_flags', 'Provider flags:'),
         ]
         error = None
@@ -736,9 +849,10 @@ class TuiWorkflows:
         if action == 'spawn':
             last_cwd = next((a['cwd'] for a in reversed(self.view.agent_rows()) if a.get('cwd')), None)
             fields = [Field('provider', 'Provider:', choices=tuple(self.controller.providers), required=True),
-                      Field('cwd', 'Working directory:', default=last_cwd or str(Path.cwd()), required=True),
+                      Field('cwd', 'Working directory:', default=last_cwd or str(Path.cwd()),
+                            required=True, directory=True),
                       Field('name', 'Agent name:'),
-                      Field('history_mode', 'History mode [none/literal]:', default='literal',
+                      Field('history_mode', 'History mode:', default='literal',
                             choices=('none', 'literal'), required=True),
                       Field('provider_flags', 'Provider flags:')]
             title, submit = 'New agent · 1 of 2', 'Next'
@@ -754,7 +868,7 @@ class TuiWorkflows:
                       Field('provider_flags', 'Provider flags:', default=shlex.join(agent.get('provider_args', [])))]
             title, submit = 'Resume agent', 'Resume agent'
         elif action == 'history':
-            fields = [Field('mode', 'History mode [none/literal]:', default=agent.get('history_mode', 'literal'),
+            fields = [Field('mode', 'History mode:', default=agent.get('history_mode', 'literal'),
                             choices=('literal', 'none'), required=True)]
             title, submit = 'History settings', 'Apply history mode'
         else:
@@ -863,7 +977,8 @@ class TuiWorkflows:
         fields = [
             Field('provider', 'Orchestrator provider:', default=current.get('provider', ''),
                   choices=tuple(self.controller.providers), required=True),
-            Field('cwd', 'Working directory:', default=last_cwd or str(Path.cwd()), required=True),
+            Field('cwd', 'Working directory:', default=last_cwd or str(Path.cwd()),
+                  required=True, directory=True),
             Field('provider_flags', 'Provider flags:',
                   default=shlex.join(current.get('provider_args', []))),
         ]
@@ -1087,7 +1202,8 @@ class TuiWorkflows:
                     'INSERT: Enter completes/adds a line · Escape returns NORMAL\n'
                     'NORMAL movement: h/j/k/l, w/b, 0/$ · Paste enters INSERT\n'
                     'Mentions such as @agent-1 appear bright cyan and bold\n'
-                    'Tab changes focus · Enter selects dialog choices\n'
+                    'Outside forms: Tab changes focus · Enter selects dialog choices\n'
+                    'Forms: Up/Down changes fields · Tab/Shift+Tab cycles choices/paths\n'
                     'Ctrl+Q Quit · Escape cancels · Ctrl+C preserves draft\n'
                     'Sessions opens navigation. Committed switches and Quit checkpoint.\n\n' +
                     HELP.replace('/history            Show recent messages in this channel',
@@ -1183,7 +1299,7 @@ class TuiWorkflows:
                         self.state.selected_agent_id = None
                     self.view.inspecting = False
                     self.view.focus_named('composer')
-                if action in ('unread', 'retry'):
+                if action == 'unread':
                     self.view.show_activity()
                 return outcome
         else:

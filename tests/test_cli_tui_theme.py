@@ -22,6 +22,28 @@ def contrast(foreground, background):
 
 
 class ThemeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_compact_choice_focus_is_visible_and_readable(self):
+        async with tui_harness() as ui:
+            task = asyncio.create_task(ui.dialogs.form('Provider', [
+                Field('provider', 'Provider:', choices=('codex', 'claude')),
+                Field('name', 'Agent name:')], submit_label='Next'))
+            try:
+                await ui.wait_until(lambda: '‹ codex ›' in ui.screen_text())
+                y, row = next((y, row) for y, row in enumerate(ui.rows) if '‹ codex ›' in row)
+                x = row.index('codex')
+                def attributes():
+                    cell = ui.application.renderer.last_rendered_screen.data_buffer[y][x]
+                    return ui.application._merged_style.get_attrs_for_style_str(cell.style)
+                focused = attributes()
+                self.assertGreaterEqual(contrast(focused.color, focused.bgcolor), 4.5)
+                await ui.key('Down')
+                self.assertNotEqual(focused.bgcolor, attributes().bgcolor)
+                await ui.key('Up')
+                self.assertEqual(focused.bgcolor, attributes().bgcolor)
+            finally:
+                ui.dialogs.cancel()
+                await task
+
     async def test_empty_canvas_paints_every_cell_without_terminal_defaults(self):
         for size in ((120, 35), (80, 18)):
             with self.subTest(size=size):
@@ -50,7 +72,7 @@ class ThemeTests(unittest.IsolatedAsyncioTestCase):
                 self.assertGreaterEqual(contrast(attrs.color, attrs.bgcolor), 4.5)
                 self.assertFalse(attrs.underline)
                 self.assertFalse(attrs.reverse)
-                await ui.key('Tab')
+                await ui.key('Down')
                 cell = ui.application.renderer.last_rendered_screen.data_buffer[y][row.index('reviewer')]
                 unfocused = ui.application._merged_style.get_attrs_for_style_str(cell.style)
                 self.assertNotEqual(attrs.bgcolor, unfocused.bgcolor)

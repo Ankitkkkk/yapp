@@ -4,6 +4,7 @@
 
 Website: https://yapp.riggedcode.com/
 Setup guide: https://yapp.riggedcode.com/docs/
+Feature guide: https://yapp.riggedcode.com/features/
 
 Install: `curl -fsSL https://yapp.riggedcode.com/install.sh | sh` (curl and tmux on Linux/macOS/WSL2; uses Python 3.11+ or downloads private Python 3.13 when system Python is older/missing; creates its own venv, links `yapp` and `goon` into ~/.local/bin; rerun to update). Alternative: `pipx install git+https://github.com/Ankitkkkk/yapp.git`. Never use `pip install --break-system-packages`.
 
@@ -12,6 +13,14 @@ Read-only checks: `yapp --help`; with a server already running, `yapp status --j
 State-changing commands (require authorization; `--json` only formats output): `yapp new <session>`, `yapp spawn <provider> --session <session> --cwd /abs/path --agent-name <name>`, `yapp send --channel <channel> "<message>"`. Read messages with `yapp read --channel <channel> --limit 20 --json`. Interactive `chat` and `attach` do not support `--json`.
 
 A plain shell `yapp new` starts no orchestrator. Add `--orchestrator-provider <provider> --cwd /abs/path` to start one. The TUI new-session form asks for these details and starts the selected provider. Add workers with F3 → Add agent.
+
+Terminal features: Markdown headings, emphasis, lists, quotes, links, tables, and syntax-highlighted code render in chat, Activity, Help, agent details, and notices. F7 shows original Markdown for terminal copying; F7 again restores formatting and scroll position. Forms use Up/Down between fields and Tab/Shift+Tab for choices or directory suggestions. Enter accepts a selected directory suggestion before submission. Drafts survive switching sessions while the client remains open.
+
+Saved agents keep working directories, provider flags, roles, and personalities. A resident orchestrator routes unaddressed human requests; @mentions stay direct. Inspect unread deliveries, retry, attach, stop, resume, or archive through the CLI/TUI. Retry keeps the conversation visible. Waiting-for-input indicators are advisory; resolve approvals in the provider terminal.
+
+Browser features: channels, jobs, rules and proposals, phased workflow templates, decision cards, scheduled messages, images, voice typing where supported, pins, reply quotes, raw Markdown copy, unread/notification controls, channel summaries, and ZIP history export/import. Graphical workflows are separate from the terminal controls.
+
+Updates: `yapp update --check` checks published releases; `yapp update` installs an available release. To install unpublished changes from a local source checkout into the installer-managed environment, run `YAPP_SOURCE="$PWD" sh install.sh` at the repository root, then reopen yapp. Preserve local data and private configuration.
 
 CLI terminal agents and API agents use different launch paths. MiniMax and OpenAI-compatible local servers use the separately configured `wrapper_api.py`; they are not terminal-session agents. Built-in native conversation resume adapters exist for Claude and Codex. Cloud agents still send context to their providers; provider fees are separate.
 
