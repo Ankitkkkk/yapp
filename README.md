@@ -1254,50 +1254,71 @@ Its upstream community is available on the [Agentchattr Discord](https://discord
 
 ### Publishing a release
 
-Use the source checkout's `release.py` with Python 3.11+, Git, and the
-[GitHub CLI](https://cli.github.com/). Authenticate once with `gh auth login`.
+Use the source checkout's `release.py` with Python 3.11+ and Git. Your existing
+GitHub SSH setup is enough for pushing: no local `gh` installation, extra login,
+or personal access token is needed. Public release checks use HTTPS.
 Commit and push the changes you want to release first, and verify their tests.
 Run the script from a clean `main` checkout synchronized with `origin/main`:
 
 ```sh
-python3 release.py --dry-run  # preview only, including without gh or network access
+python3 release.py --dry-run  # preview only, without network access or changes
 python3 release.py            # minor: 0.5.0 -> 0.6.0; 1.9.7 -> 1.10.0
 python3 release.py --major    # major: 0.6.0 -> 1.0.0; 1.9.7 -> 2.0.0
 ```
 
 Choose either the default command or `--major` for each release. The script
 commits only `VERSION`, creates a matching annotated tag, atomically pushes
-the release commit and tag to `origin`, and publishes a stable GitHub release
-with generated notes. It rechecks published versions before publication and
-uses GitHub's automatic version-based latest selection. No separate ZIP upload is needed: installed
+the release commit and tag to `origin`, and prints a link to the
+[Publish release workflow](https://github.com/Ankitkkkk/yapp/actions/workflows/release.yml).
+GitHub Actions publishes a stable release with generated notes using its
+automatic `GITHUB_TOKEN` with `contents: write` permission. It verifies that
+the tag matches `VERSION` and points to a commit on `main`, checks published
+versions, and uses GitHub's automatic version-based latest selection.
+No separate ZIP upload is needed: installed
 copies download GitHub's source archive, which contains the TUI and its package
 dependencies. This does not use the older `build_release.py` ZIP builder.
 
 Publishing requires `origin` to point to `Ankitkkkk/yapp` (the repository used
-by the updater), permission to push to `main` and create releases, and working
-Git and GitHub authentication. Dirty checkouts, detached/other branches,
-unsynchronized commits, existing tags, and conflicting release versions stop
-the script before it changes `VERSION`. Dry-run only shows the plan; it does
-not check these Git/GitHub prerequisites or run tests.
+by the updater), permission to push to `main` and create tags, and Actions enabled
+for the repository. Commit and push `.github/workflows/release.yml` before the
+first release. The workflow declares the required token permission; no secret
+needs to be created manually. Repository or organization policies must allow it.
+Dirty checkouts, detached/other branches, unsynchronized commits, existing tags,
+and conflicting public release versions stop the script before it changes
+`VERSION`. API errors, including rate limits, also stop the release; retry once
+access is restored. Dry-run only shows the plan; it does not check these
+Git/GitHub prerequisites or run tests.
 
-If a push or publication fails after the version commit, inspect `git status`
-and finish the same release with:
+A successful local command confirms the tag was pushed. Publication happens
+asynchronously: wait for **Publish release** to succeed before running
+`yapp update`. A tag alone is not a published GitHub Release.
+
+If the push fails after the version commit, inspect `git status` and finish
+pushing the same release with:
 
 ```sh
 python3 release.py --resume
 ```
 
 Resume requires the clean version-only release commit at `HEAD`. It verifies
-existing tags, reuses the version, and publishes only if the release is missing.
+existing tags and reuses the version. If the tag is already pushed, it reports
+the release status and links to Actions; pushing the same tag again does not
+restart a workflow. For a failed publication, use **Re-run failed jobs** in
+Actions, or select **Publish release → Run workflow**, choose `main`, and enter
+the existing tag (for example `v0.6.0`). The publisher safely skips an already
+published release. Do not bump the version again to retry a failed job.
 If the version commit itself failed, inspect the remaining `VERSION` change
 and complete that commit with the shown `release: vX.Y.Z` subject first.
 The script never resets work, moves existing tags, or force-pushes. Existing
 GitHub drafts/prereleases are left for you to finish in GitHub.
 
-For a manual release, bump `VERSION`, commit and push to `main`, then create a
-GitHub Release using the matching `vX.Y.Z` tag on that commit.
+For a manual release, bump `VERSION`, commit and push to `main`, then push a
+matching `vX.Y.Z` tag on that commit to trigger the same workflow. Alternatively,
+create the release through GitHub's website using that matching tag.
 
-Installed copies pick it up within 6 hours. Keep the tag and `VERSION` in sync:
+Users can run `yapp update` as soon as publication succeeds. Supported installs
+with automatic updates enabled check within 6 hours while the TUI is running.
+Keep the tag and `VERSION` in sync:
 after installing, yapp checks that the installed version equals the tag, so a
 tag that does not match `VERSION` on that commit makes every update fail
 verification, on every check, until a matching release is published.

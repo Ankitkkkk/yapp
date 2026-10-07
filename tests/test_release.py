@@ -10,12 +10,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from urllib.error import HTTPError
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'release.py'
-
-
-def is_publication(command):
-    return command[:2] == ['gh', 'api'] and '--method' in command and 'POST' in command
 
 
 class ReleasePreviewTests(unittest.TestCase):
@@ -68,13 +65,18 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.git('config', 'user.name', 'Release Test')
         self.git('config', 'user.email', 'release@example.invalid')
         (self.repo / 'VERSION').write_text('0.5.7\n')
-        self.git('add', 'VERSION')
+        workflow = self.repo / '.github/workflows/release.yml'
+        workflow.parent.mkdir(parents=True)
+        workflow.write_text('name: Publish release\n')
+        self.git('add', 'VERSION', '.github/workflows/release.yml')
         self.git('commit', '-m', 'Existing TUI improvements')
         self.git('remote', 'add', 'origin', str(self.remote))
         self.git('push', 'origin', 'main')
         self.original_head = self.git('rev-parse', 'HEAD')
         self.calls = []
         self.releases = []
+        self.requests = []
+        self.api_failure = None
         self.push_url = 'git@github.com:Ankitkkkk/yapp.git'
         self.failure = None
         self.out = []
@@ -94,43 +96,32 @@ class ReleaseWorkflowTests(unittest.TestCase):
         # GitHub push URL is substituted so production destination checks apply.
         if command[:3] == ['git', 'remote', 'get-url']:
             return subprocess.CompletedProcess(command, 0, self.push_url + '\n', '')
-        if command[0] == 'gh':
-            if command[1:3] == ['auth', 'status']:
-                return subprocess.CompletedProcess(command, 0, '', '')
-            if command[1] == 'api' and not is_publication(command):
-                self.assertIn('--paginate', command)
-                self.assertIn('--slurp', command)
-                return subprocess.CompletedProcess(command, 0, json.dumps([self.releases]), '')
-            if is_publication(command):
-                fields = dict(value.split('=', 1) for index, value in enumerate(command)
-                              if index > 0 and command[index - 1] in ('-f', '-F'))
-                tag = fields['tag_name']
-                self.assertEqual(fields['make_latest'], 'legacy')
-                self.assertEqual(fields['generate_release_notes'], 'true')
-                self.assertEqual(fields['draft'], 'false')
-                self.assertEqual(fields['prerelease'], 'false')
-                self.assertEqual(command[2], 'repos/Ankitkkkk/yapp/releases')
-                # A publish may only happen after the exact version reached Git.
-                self.assertEqual(self.git('show', f'{tag}:VERSION', root=self.remote), tag[1:])
-                self.assertEqual(self.git('rev-parse', f'{tag}^{{}}', root=self.remote), fields['target_commitish'])
-                url = 'https://github.com/Ankitkkkk/yapp/releases/tag/' + tag
-                record = {'tag_name': tag, 'draft': False, 'prerelease': False, 'html_url': url}
-                self.releases.append(record)
-                return subprocess.CompletedProcess(command, 0, json.dumps(record), '')
-            self.fail(f'Unexpected GitHub command: {command}')
+        if command[0] != 'git':
+            raise FileNotFoundError(command[0])
         kwargs['env'] = self.env
         return subprocess.run(command, **kwargs)
 
+    def opener(self, request, timeout):
+        self.requests.append(request)
+        if self.api_failure:
+            return self.api_failure(request)
+        self.assertEqual(request.full_url,
+                         'https://api.github.com/repos/Ankitkkkk/yapp/releases?per_page=100&page=1')
+        self.assertEqual(request.get_method(), 'GET')
+        self.assertIsNone(request.get_header('Authorization'))
+        return io.BytesIO(json.dumps(self.releases).encode())
+
     def run_release(self, *args):
         return self.release.main(list(args), root=self.repo, runner=self.runner,
-                                 output=self.out.append, error_output=self.errors.append)
+                                 opener=self.opener, output=self.out.append,
+                                 error_output=self.errors.append)
 
     def assert_untouched(self):
         self.assertEqual(self.git('rev-parse', 'HEAD'), self.original_head)
         self.assertEqual((self.repo / 'VERSION').read_text(), '0.5.7\n')
-        self.assertFalse(any(is_publication(call) for call in self.calls))
+        self.assertFalse(any(r.get_method() == 'POST' for r in self.requests))
 
-    def test_default_release_publishes_matching_minor_version_commit_and_tag(self):
+    def test_default_release_pushes_matching_tag_without_gh_or_local_token(self):
         self.assertEqual(self.run_release(), 0, self.errors)
         self.assertEqual((self.repo / 'VERSION').read_text(), '0.6.0\n')
         head = self.git('rev-parse', 'HEAD')
@@ -138,9 +129,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.git('rev-parse', 'v0.6.0^{}', root=self.remote), head)
         self.assertEqual(self.git('diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD'), 'VERSION')
         self.assertEqual(self.git('status', '--porcelain'), '')
-        self.assertIn('https://github.com/Ankitkkkk/yapp/releases/tag/v0.6.0', '\n'.join(self.out))
+        self.assertIn('GitHub Actions', '\n'.join(self.out))
+        self.assertIn('actions/workflows/release.yml', '\n'.join(self.out))
+        self.assertFalse(any(r.get_method() == 'POST' for r in self.requests))
 
-    def test_major_release_publishes_one_zero_zero(self):
+    def test_major_release_pushes_one_zero_zero(self):
         self.assertEqual(self.run_release('--major'), 0, self.errors)
         self.assertEqual(self.git('show', 'v1.0.0:VERSION', root=self.remote), '1.0.0')
 
@@ -178,25 +171,22 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.run_release(), 1)
         self.assert_untouched()
 
-    def test_auth_failure_is_reported_before_version_changes(self):
-        self.failure = lambda c: c[:3] == ['gh', 'auth', 'status']
+    def test_ssh_failure_is_reported_before_version_changes(self):
+        self.failure = lambda c: c[:2] == ['git', 'ls-remote']
         self.assertEqual(self.run_release(), 1)
         self.assert_untouched()
 
     def test_release_lookup_failure_is_not_treated_as_missing_release(self):
-        self.failure = lambda c: c[:2] == ['gh', 'api']
+        def unavailable(request):
+            raise HTTPError(request.full_url, 403, 'rate limited', {}, None)
+
+        self.api_failure = unavailable
         self.assertEqual(self.run_release(), 1)
         self.assert_untouched()
+        self.assertIn('403', '\n'.join(self.errors))
 
     def test_malformed_github_lookup_does_not_bump_version(self):
-        original = self.runner
-
-        def malformed(command, **kwargs):
-            if command[:2] == ['gh', 'api'] and not is_publication(command):
-                return subprocess.CompletedProcess(command, 0, '{"message":"unexpected"}', '')
-            return original(command, **kwargs)
-
-        self.runner = malformed
+        self.api_failure = lambda request: io.BytesIO(b'{"message":"unexpected"}')
         self.assertEqual(self.run_release(), 1)
         self.assert_untouched()
 
@@ -206,18 +196,14 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.run_release(), 1)
         self.assert_untouched()
 
-    def test_missing_github_cli_fails_before_version_changes(self):
-        original = self.runner
-
-        def without_gh(command, **kwargs):
-            if command[0] == 'gh':
-                raise FileNotFoundError('gh')
-            return original(command, **kwargs)
-
-        self.runner = without_gh
+    def test_missing_workflow_stops_before_bumping(self):
+        self.git('rm', '.github/workflows/release.yml')
+        self.git('commit', '-m', 'Remove publisher')
+        self.git('push', 'origin', 'main')
+        self.original_head = self.git('rev-parse', 'HEAD')
         self.assertEqual(self.run_release(), 1)
         self.assert_untouched()
-        self.assertIn('gh is required', '\n'.join(self.errors))
+        self.assertIn('release.yml', '\n'.join(self.errors))
 
     def test_failed_version_commit_leaves_changes_visible_and_no_tag(self):
         self.failure = lambda c: c[:2] == ['git', 'commit']
@@ -259,24 +245,10 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.run_release(), 1)
         self.assertEqual(self.git('rev-parse', 'main', root=self.remote), advanced[0])
         self.assertEqual(self.git('tag', '--list', root=self.remote), '')
-        self.assertFalse(any(is_publication(c) for c in self.calls))
+        self.assertFalse(any(r.get_method() == 'POST' for r in self.requests))
         self.failure = None
         self.assertEqual(self.run_release('--resume'), 1)
         self.assertIn('Reconcile main', '\n'.join(self.errors))
-
-    def test_newer_release_published_during_push_blocks_older_publication(self):
-        original = self.runner
-
-        def publish_race(command, **kwargs):
-            result = original(command, **kwargs)
-            if command[:2] == ['git', 'push'] and result.returncode == 0:
-                self.releases.append({'tag_name': 'v1.0.0', 'draft': False,
-                                      'prerelease': False, 'html_url': 'https://github.com/Ankitkkkk/yapp/releases/tag/v1.0.0'})
-            return result
-
-        self.runner = publish_race
-        self.assertEqual(self.run_release(), 1)
-        self.assertFalse(any(is_publication(c) for c in self.calls))
 
     def test_existing_local_tag_does_not_get_overwritten(self):
         self.git('tag', 'v0.6.0')
@@ -308,44 +280,27 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.git('rev-parse', 'HEAD'), head)
         self.assertEqual(self.git('tag', '--list', root=self.remote), 'v0.6.0')
 
-    def test_failed_publish_can_resume_after_main_advances(self):
-        self.failure = lambda c: is_publication(c)
-        self.assertEqual(self.run_release(), 1)
+    def test_resume_after_push_reports_actions_retry_without_another_push(self):
+        self.assertEqual(self.run_release(), 0, self.errors)
         head = self.git('rev-parse', 'HEAD')
-        # A teammate advances origin/main after our atomic branch/tag push.
         next_commit = self.advance_remote(head)
-        self.failure = None
+        pushes = len([c for c in self.calls if c[:2] == ['git', 'push']])
         self.assertEqual(self.run_release('--resume'), 0, self.errors)
         self.assertEqual(self.git('rev-parse', 'main', root=self.remote), next_commit)
         self.assertEqual(self.git('rev-parse', 'v0.6.0^{}', root=self.remote), head)
+        self.assertEqual(len([c for c in self.calls if c[:2] == ['git', 'push']]), pushes)
+        self.assertIn('Re-run', '\n'.join(self.out))
 
     def test_resume_of_completed_release_is_idempotent(self):
         self.assertEqual(self.run_release(), 0, self.errors)
+        self.releases.append({'tag_name': 'v0.6.0', 'draft': False, 'prerelease': False})
         self.assertEqual(self.run_release('--resume'), 0, self.errors)
-        creates = [c for c in self.calls if is_publication(c)]
-        self.assertEqual(len(creates), 1)
-
-    def test_uncertain_publication_response_resumes_without_duplicate(self):
-        original = self.runner
-
-        def lost_response(command, **kwargs):
-            result = original(command, **kwargs)
-            if is_publication(command):
-                return subprocess.CompletedProcess(command, 0, 'invalid JSON response', '')
-            return result
-
-        self.runner = lost_response
-        self.assertEqual(self.run_release(), 1)
-        self.assertIn('--resume', '\n'.join(self.errors))
-        self.runner = original
-        self.assertEqual(self.run_release('--resume'), 0, self.errors)
-        self.assertEqual(len([c for c in self.calls if is_publication(c)]), 1)
+        self.assertIn('Already published', '\n'.join(self.out))
+        self.assertEqual(len([c for c in self.calls if c[:2] == ['git', 'push']]), 1)
 
     def test_resume_rejects_moved_remote_tag(self):
-        self.failure = lambda c: is_publication(c)
-        self.assertEqual(self.run_release(), 1)
+        self.assertEqual(self.run_release(), 0, self.errors)
         self.git('update-ref', 'refs/tags/v0.6.0', self.original_head, root=self.remote)
-        self.failure = None
         self.assertEqual(self.run_release('--resume'), 1)
         self.assertIn('different commit', '\n'.join(self.errors))
         self.assertEqual(self.git('rev-parse', 'v0.6.0', root=self.remote), self.original_head)
@@ -359,6 +314,179 @@ class ReleaseWorkflowTests(unittest.TestCase):
             self.run_release('--major', '--resume')
         self.assertEqual(raised.exception.code, 2)
         self.assert_untouched()
+
+
+class GitHubReleaseAPITests(unittest.TestCase):
+    def setUp(self):
+        self.release = importlib.import_module('release')
+
+    def test_public_lookup_follows_pages_without_sending_credentials(self):
+        calls = []
+        first = [{'tag_name': 'v0.5.0', 'draft': False, 'prerelease': False}] * 100
+        last = [{'tag_name': 'v0.4.0', 'draft': False, 'prerelease': False}]
+
+        def opener(request, timeout):
+            calls.append(request.full_url)
+            self.assertIsNone(request.get_header('Authorization'))
+            page = first if request.full_url.endswith('page=1') else last
+            return io.BytesIO(json.dumps(page).encode())
+
+        releases = self.release.github_releases(self.release.GitHubAPI(opener))
+        self.assertEqual(len(releases), 101)
+        self.assertEqual(releases[-1]['tag_name'], 'v0.4.0')
+        self.assertEqual(calls, [
+            'https://api.github.com/repos/Ankitkkkk/yapp/releases?per_page=100&page=1',
+            'https://api.github.com/repos/Ankitkkkk/yapp/releases?per_page=100&page=2'])
+
+    def test_api_failures_do_not_expose_tokens_or_response_body(self):
+        token = 'test-secret-value'
+
+        def opener(request, timeout):
+            raise HTTPError(request.full_url, 403, token, {}, io.BytesIO(token.encode()))
+
+        with self.assertRaises(self.release.ReleaseError) as raised:
+            self.release.GitHubAPI(opener, token=token)('releases')
+        self.assertIn('403', str(raised.exception))
+        self.assertNotIn(token, str(raised.exception))
+
+
+class ActionsPublicationTests(unittest.TestCase):
+    # Share setup/helpers, not inherited test methods.
+    setUp = ReleaseWorkflowTests.setUp
+    git = ReleaseWorkflowTests.git
+    runner = ReleaseWorkflowTests.runner
+    advance_remote = ReleaseWorkflowTests.advance_remote
+
+    def prepare_tag(self, version='0.6.0', push=True):
+        (self.repo / 'VERSION').write_text(version + '\n')
+        self.git('commit', '-am', f'release: v{version}')
+        self.git('tag', '-a', f'v{version}', '-m', f'Yapp {version}')
+        if push:
+            self.git('push', '--atomic', 'origin', 'main', f'v{version}')
+        self.git('checkout', '--detach', f'v{version}')
+
+    def opener(self, request, timeout):
+        self.requests.append(request)
+        self.assertEqual(request.get_header('Authorization'), 'Bearer workflow-test-token')
+        if self.api_failure:
+            return self.api_failure(request)
+        if request.get_method() == 'GET':
+            self.assertEqual(request.full_url,
+                             'https://api.github.com/repos/Ankitkkkk/yapp/releases?per_page=100&page=1')
+            return io.BytesIO(json.dumps(self.releases).encode())
+        self.assertEqual(request.get_method(), 'POST')
+        self.assertEqual(request.full_url, 'https://api.github.com/repos/Ankitkkkk/yapp/releases')
+        fields = json.loads(request.data)
+        self.assertEqual(fields, {
+            'tag_name': 'v0.6.0', 'target_commitish': self.git('rev-parse', 'HEAD'),
+            'name': 'Yapp 0.6.0', 'generate_release_notes': True,
+            'draft': False, 'prerelease': False, 'make_latest': 'legacy'})
+        self.assertEqual(self.git('show', 'v0.6.0:VERSION', root=self.remote), '0.6.0')
+        record = {'tag_name': 'v0.6.0', 'draft': False, 'prerelease': False}
+        self.releases.append(record)
+        return io.BytesIO(json.dumps(record).encode())
+
+    def run_publisher(self, tag='v0.6.0', **env):
+        environment = dict(GITHUB_ACTIONS='true', GITHUB_REPOSITORY='Ankitkkkk/yapp',
+                           GITHUB_TOKEN='workflow-test-token')
+        environment.update(env)
+        return self.release.main(['--publish-tag', tag], root=self.repo, runner=self.runner,
+                                 opener=self.opener, environment=environment,
+                                 output=self.out.append, error_output=self.errors.append)
+
+    def test_tag_publication_uses_workflow_token_and_exact_commit_without_gh(self):
+        self.prepare_tag()
+        self.assertEqual(self.run_publisher(), 0, self.errors)
+        self.assertEqual(len(self.releases), 1)
+        self.assertIn('Published:', '\n'.join(self.out))
+        self.assertFalse(any(c[:2] in (['git', 'commit'], ['git', 'push']) for c in self.calls))
+
+    def test_publisher_requires_workflow_token(self):
+        self.prepare_tag()
+        self.assertEqual(self.run_publisher(GITHUB_TOKEN=''), 1)
+        self.assertEqual(self.requests, [])
+
+    def test_publisher_rejects_fork_or_local_invocation(self):
+        self.prepare_tag()
+        for env in ({'GITHUB_REPOSITORY': 'someone/fork'}, {'GITHUB_ACTIONS': ''}):
+            with self.subTest(env=env):
+                self.assertEqual(self.run_publisher(**env), 1)
+                self.assertEqual(self.requests, [])
+
+    def test_mismatched_or_invalid_tag_is_never_published(self):
+        self.prepare_tag()
+        for tag in ('v0.7.0', 'v0.6.0-beta', 'main', 'v01.2.3', '../../main'):
+            with self.subTest(tag=tag):
+                self.assertEqual(self.run_publisher(tag), 1)
+                self.assertEqual(self.releases, [])
+
+    def test_absent_or_moved_remote_tag_is_never_published(self):
+        self.prepare_tag()
+        self.git('update-ref', 'refs/tags/v0.6.0', self.original_head, root=self.remote)
+        self.assertEqual(self.run_publisher(), 1)
+        self.git('tag', '-d', 'v0.6.0', root=self.remote)
+        self.assertEqual(self.run_publisher(), 1)
+        self.assertEqual(self.releases, [])
+
+    def test_tag_outside_main_is_not_published(self):
+        self.git('switch', '-c', 'unmerged')
+        self.prepare_tag(push=False)
+        self.git('push', 'origin', 'v0.6.0')
+        self.assertEqual(self.run_publisher(), 1)
+        self.assertEqual(self.releases, [])
+
+    def test_newer_published_version_blocks_older_publication(self):
+        self.prepare_tag()
+        self.releases.append({'tag_name': 'v1.0.0', 'draft': False, 'prerelease': False})
+        self.assertEqual(self.run_publisher(), 1)
+        self.assertFalse(any(r.get_method() == 'POST' for r in self.requests))
+
+    def test_rerunning_completed_workflow_is_idempotent(self):
+        self.prepare_tag()
+        self.assertEqual(self.run_publisher(), 0, self.errors)
+        self.assertEqual(self.run_publisher(), 0, self.errors)
+        self.assertEqual(len(self.releases), 1)
+        self.assertIn('Already published', '\n'.join(self.out))
+
+    def test_draft_or_prerelease_is_left_unchanged(self):
+        self.prepare_tag()
+        for draft, prerelease in ((True, False), (False, True)):
+            with self.subTest(draft=draft):
+                self.releases[:] = [{'tag_name': 'v0.6.0', 'draft': draft, 'prerelease': prerelease}]
+                self.assertEqual(self.run_publisher(), 1)
+                self.assertFalse(any(r.get_method() == 'POST' for r in self.requests))
+
+    def test_failed_publication_can_retry_after_main_advances(self):
+        self.prepare_tag()
+        original = self.opener
+
+        def fail_post(request, timeout):
+            if request.get_method() == 'POST':
+                raise HTTPError(request.full_url, 500, 'unavailable', {}, None)
+            return original(request, timeout)
+
+        self.opener = fail_post
+        self.assertEqual(self.run_publisher(), 1)
+        head = self.git('rev-parse', 'HEAD')
+        later = self.advance_remote(head)
+        self.opener = original
+        self.assertEqual(self.run_publisher(), 0, self.errors)
+        self.assertEqual(self.git('rev-parse', 'main', root=self.remote), later)
+        self.assertEqual(self.git('rev-parse', 'HEAD'), head)
+
+    def test_uncertain_response_retries_without_duplicate_publication(self):
+        self.prepare_tag()
+        original = self.opener
+
+        def lose_response(request, timeout):
+            result = original(request, timeout)
+            return io.BytesIO(b'not json') if request.get_method() == 'POST' else result
+
+        self.opener = lose_response
+        self.assertEqual(self.run_publisher(), 1)
+        self.opener = original
+        self.assertEqual(self.run_publisher(), 0, self.errors)
+        self.assertEqual(len(self.releases), 1)
 
 
 if __name__ == '__main__':

@@ -2,19 +2,25 @@
 """Publish Yapp releases: minor by default, --major for a breaking release.
 
 Use --dry-run to preview without GitHub access or filesystem changes.
-Requires a clean main checkout, Git, and an authenticated GitHub CLI (gh).
+Requires a clean main checkout and Git push access (SSH works).
+GitHub Actions publishes the pushed tag; no local GitHub CLI or token is needed.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import shlex
 import subprocess
 import sys
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
 REPO = 'Ankitkkkk/yapp'
 VERSION_PATTERN = re.compile(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)')
+WORKFLOW = '.github/workflows/release.yml'
+ACTIONS_URL = f'https://github.com/{REPO}/actions/workflows/release.yml'
 
 
 class ReleaseError(Exception):
@@ -67,23 +73,50 @@ def tag_commit(refs, tag):
     return refs.get(f'refs/tags/{tag}^{{}}', refs.get(f'refs/tags/{tag}'))
 
 
-def github_releases(commands):
-    # Listing distinguishes an empty release list from an auth/network failure.
-    raw = commands('gh', 'api', f'repos/{REPO}/releases?per_page=100',
-                   '--hostname', 'github.com', '--paginate', '--slurp')
-    try:
-        pages = json.loads(raw)
-        if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
-            raise ValueError('expected pages of releases')
-        releases = [release for page in pages for release in page]
-        if any(not isinstance(release, dict)
-               or not isinstance(release.get('tag_name'), str)
-               or not isinstance(release.get('draft'), bool)
-               or not isinstance(release.get('prerelease'), bool) for release in releases):
-            raise ValueError('invalid release record')
-        return releases
-    except (ValueError, TypeError) as error:
-        raise ReleaseError('GitHub returned an unexpected release list; no release was created.') from error
+class GitHubAPI:
+    """Anonymous public checks locally; the Actions token is used only in CI."""
+
+    def __init__(self, opener=urlopen, *, token=''):
+        self.opener = opener
+        self.token = token
+
+    def __call__(self, path, *, data=None):
+        headers = {'Accept': 'application/vnd.github+json', 'User-Agent': 'yapp-release',
+                   'X-GitHub-Api-Version': '2022-11-28'}
+        if self.token:
+            headers['Authorization'] = f'Bearer {self.token}'
+        body = None
+        if data is not None:
+            headers['Content-Type'] = 'application/json'
+            body = json.dumps(data).encode()
+        request = Request(f'https://api.github.com/repos/{REPO}/{path}', data=body, headers=headers)
+        try:
+            with self.opener(request, timeout=30) as response:
+                return json.load(response)
+        except HTTPError as error:
+            # Never echo authorization headers or arbitrary API response bodies.
+            raise ReleaseError(f'GitHub API returned HTTP {error.code}. Check GitHub access/rate limits '
+                               'and retry; a failed lookup is not an empty release list.') from error
+        except (URLError, TimeoutError, OSError) as error:
+            raise ReleaseError('Could not reach GitHub API. Check your connection and retry.') from error
+        except (ValueError, UnicodeError) as error:
+            raise ReleaseError('GitHub returned invalid JSON. Check the release on GitHub before retrying.') from error
+
+
+def github_releases(api):
+    releases = []
+    page = 1
+    while True:
+        items = api(f'releases?per_page=100&page={page}')
+        if not isinstance(items, list) or any(
+                not isinstance(item, dict) or not isinstance(item.get('tag_name'), str)
+                or not isinstance(item.get('draft'), bool)
+                or not isinstance(item.get('prerelease'), bool) for item in items):
+            raise ReleaseError('GitHub returned an unexpected release list; no release was created.')
+        releases.extend(items)
+        if len(items) < 100:
+            return releases
+        page += 1
 
 
 def release_parent(commands, version, head):
@@ -105,18 +138,21 @@ def require_newer_release(releases, version):
                 raise ReleaseError('A newer or equal release is already published. Update main before releasing.')
 
 
-def publish(root, current, version, *, resume, commands, output):
+def publish(root, current, version, *, resume, commands, api, output):
     if commands('git', 'branch', '--show-current') != 'main':
         raise ReleaseError('Run releases from main, after merging and verifying your changes.')
     if commands('git', 'status', '--porcelain', '--untracked-files=all'):
         raise ReleaseError('A clean working tree is required. Commit or set aside local changes first.')
     validate_origin(commands)
     head = commands('git', 'rev-parse', 'HEAD')
-    # Fail before writing VERSION if commit identity or GitHub authentication is missing.
+    # Fail before writing VERSION if commit identity or the publisher is missing.
     commands('git', 'var', 'GIT_AUTHOR_IDENT')
     commands('git', 'var', 'GIT_COMMITTER_IDENT')
-    commands('gh', 'auth', 'status', '--hostname', 'github.com')
-    releases = github_releases(commands)
+    try:
+        commands('git', 'cat-file', '-e', f'{head}:{WORKFLOW}')
+    except ReleaseError as error:
+        raise ReleaseError(f'Commit and push {WORKFLOW} before releasing; GitHub Actions publishes the tag.') from error
+    releases = github_releases(api)
     tag = f'v{version}'
     existing = next((item for item in releases if item['tag_name'] == tag), None)
     refs = remote_refs(commands, tag)
@@ -172,53 +208,91 @@ def publish(root, current, version, *, resume, commands, output):
             commands('git', 'push', '--atomic', '--no-follow-tags', 'origin', *targets)
         if tag_commit(remote_refs(commands, tag), tag) != head:
             raise ReleaseError('The pushed release tag does not match the verified release commit.')
-        require_newer_release(github_releases(commands), version)
-        output(f'Publishing {tag} with generated release notes.')
-        # Unlike --latest, legacy lets GitHub consider semantic versions if
-        # another release appears between the final check and publication.
-        # Pin target_commitish too, so an absent/deleted tag cannot select a
-        # different default-branch commit in the API's tag-creation fallback.
-        raw = commands('gh', 'api', f'repos/{REPO}/releases', '--hostname', 'github.com',
-                       '--method', 'POST', '-f', f'tag_name={tag}', '-f', f'target_commitish={head}',
-                       '-f', f'name=Yapp {version}', '-F', 'generate_release_notes=true',
-                       '-F', 'draft=false', '-F', 'prerelease=false', '-f', 'make_latest=legacy')
-        try:
-            created = json.loads(raw)
-            if (not isinstance(created, dict) or created.get('tag_name') != tag
-                    or created.get('draft') is not False or created.get('prerelease') is not False):
-                raise ValueError('release response did not confirm publication')
-        except ValueError as error:
-            raise ReleaseError('GitHub did not confirm the published release. Check GitHub before retrying.') from error
-        output(f'Published: https://github.com/{REPO}/releases/tag/{tag}')
-        output('Users can install it with: yapp update')
+        output(f'Tag {tag} is pushed. GitHub Actions publishes the release asynchronously.')
+        output(f'Check the Publish release workflow: {ACTIONS_URL}')
+        if remote_tag:
+            output('An existing tag push does not restart Actions. Re-run the failed job, '
+                   f'or use Run workflow on main with tag {tag}.')
+        output('After the workflow succeeds, users can install it with: yapp update')
     except (ReleaseError, OSError) as error:
         raise ReleaseError(f'{error}\nRelease stopped; files and refs were left for inspection. '
                            'Once the version-only release commit is clean, run python3 release.py --resume '
                            'to finish this version. Do not bump it again.') from error
 
 
-def main(argv=None, *, root=ROOT, runner=subprocess.run, output=print,
+def publish_tag(root, tag, *, commands, api, output):
+    """Run on the tagged checkout in Actions, including safe workflow retries."""
+    if not tag.startswith('v'):
+        raise ReleaseError('Release tags must use vMAJOR.MINOR.PATCH.')
+    version = tag[1:]
+    parse_version(version)
+    if (root / 'VERSION').read_text().strip() != version:
+        raise ReleaseError('The release tag must match VERSION in the tagged checkout.')
+    validate_origin(commands)
+    head = commands('git', 'rev-parse', 'HEAD')
+    if tag_commit(remote_refs(commands, tag), tag) != head:
+        raise ReleaseError('The remote release tag must exist and match the checked-out commit.')
+    commands('git', 'fetch', '--no-tags', 'origin', 'main')
+    try:
+        commands('git', 'merge-base', '--is-ancestor', head, 'FETCH_HEAD')
+    except ReleaseError as error:
+        raise ReleaseError('The release tag must point to a commit on origin/main.') from error
+    releases = github_releases(api)
+    existing = next((item for item in releases if item['tag_name'] == tag), None)
+    if existing:
+        if existing['draft'] or existing['prerelease']:
+            raise ReleaseError(f'{tag} already exists as a draft or prerelease. Finish it on GitHub.')
+        output(f'Already published: https://github.com/{REPO}/releases/tag/{tag}')
+        return
+    require_newer_release(releases, version)
+    # Pin the commit for the API's absent-tag fallback. Automatic latest
+    # selection avoids forcing an older release over a concurrent newer one.
+    created = api('releases', data={
+        'tag_name': tag, 'target_commitish': head, 'name': f'Yapp {version}',
+        'generate_release_notes': True, 'draft': False, 'prerelease': False,
+        'make_latest': 'legacy',
+    })
+    if (not isinstance(created, dict) or created.get('tag_name') != tag
+            or created.get('draft') is not False or created.get('prerelease') is not False):
+        raise ReleaseError('GitHub did not confirm publication. Inspect GitHub and re-run this workflow.')
+    output(f'Published: https://github.com/{REPO}/releases/tag/{tag}')
+    output('Users can install it with: yapp update')
+
+
+def main(argv=None, *, root=ROOT, runner=subprocess.run, opener=urlopen, environment=None, output=print,
          error_output=None):
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--major', action='store_true', help='Bump MAJOR and reset MINOR/PATCH; default bumps MINOR')
     mode.add_argument('--resume', action='store_true', help='Finish publishing the current version-only release commit')
+    mode.add_argument('--publish-tag', metavar='TAG', help='GitHub Actions only: publish an already-pushed tag')
     parser.add_argument('--dry-run', action='store_true', help='Show the plan only; no Git/GitHub checks or changes')
     args = parser.parse_args(argv)
     error_output = error_output or (lambda text: print(text, file=sys.stderr))
     root = Path(root)
     try:
+        if args.publish_tag:
+            if args.dry_run:
+                raise ReleaseError('--publish-tag cannot be combined with --dry-run.')
+            env = os.environ if environment is None else environment
+            if (env.get('GITHUB_ACTIONS') != 'true' or env.get('GITHUB_REPOSITORY') != REPO
+                    or not env.get('GITHUB_TOKEN')):
+                raise ReleaseError('--publish-tag runs only in this repository\'s GitHub Actions workflow '
+                                   'with its automatic GITHUB_TOKEN. Locally, run python3 release.py.')
+            publish_tag(root, args.publish_tag, commands=Commands(root, runner),
+                        api=GitHubAPI(opener, token=env['GITHUB_TOKEN']), output=output)
+            return 0
         current = (root / 'VERSION').read_text().strip()
         major, minor, _patch = parse_version(current)
         version = current if args.resume else (f'{major + 1}.0.0' if args.major else f'{major}.{minor + 1}.0')
         output(f'{"Resume" if args.resume else "Release"}: {current} -> {version} (v{version})')
         if args.dry_run:
             output(f'Plan: {"reuse" if args.resume else "commit"} VERSION, push main and tag v{version} '
-                   f'to {REPO}, publish a latest GitHub release with generated notes.')
+                   f'to {REPO}; GitHub Actions publishes a stable release with generated notes.')
             output('Preview only: no files changed; clean main, origin, GitHub access, and tags are not checked.')
             return 0
         publish(root, current, version, resume=args.resume,
-                commands=Commands(root, runner), output=output)
+                commands=Commands(root, runner), api=GitHubAPI(opener), output=output)
         return 0
     except (ReleaseError, OSError) as error:
         error_output(str(error))
