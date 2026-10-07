@@ -68,6 +68,8 @@ to update.
 
 ### Staying up to date
 
+Run `yapp --version` to show your installed version without starting the server.
+
 yapp updates itself. While the TUI is open it checks for a new
 [release](https://github.com/Ankitkkkk/yapp/releases) every 6 hours; when one
 appears it installs it, restarts the server, and reopens, keeping your agents

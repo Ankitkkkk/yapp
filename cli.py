@@ -408,7 +408,11 @@ def choose_interactive_mode(*, plain, stdin_tty, stdout_tty, platform, term):
 
 
 def build_parser(*, prog=None):
+    from updates import RUNNING_VERSION
+
     parser = argparse.ArgumentParser(prog=prog, description="yapp: terminal chat and shell commands for a local yapp server.")
+    parser.add_argument("--version", action="version",
+                        version=f"%(prog)s {RUNNING_VERSION or 'unknown'}")
     parser.set_defaults(url=None, channel=None, session=None, name=None, history=30,
                         timeout=15, json=False, command="chat", agent_name=None,
                         history_mode="literal", cwd=None, fresh=False, archived=False,
